@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, MapPin, Linkedin, Twitter, Facebook, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { Mail, Phone, MapPin, Linkedin, Twitter, Facebook, Instagram, Menu, X, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -11,8 +12,18 @@ const MainLayout = ({ children }: MainLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const navLinks = [
+    { label: "Home", href: "/" },
     { label: "About", href: "/#about" },
     { label: "Programs", href: "/programs" },
     { label: "Services", href: "/services" },
@@ -22,33 +33,54 @@ const MainLayout = ({ children }: MainLayoutProps) => {
     { label: "Contact", href: "/contact" },
   ];
 
-  const isActive = (href: string) => location.pathname === href;
+  const isActive = (href: string) => {
+    if (href === "/") return location.pathname === "/";
+    return location.pathname === href;
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* ================= STICKY HEADER ================= */}
-      <header className="sticky top-0 z-50 bg-card border-b border-border/50 shadow-subtle backdrop-blur-sm">
+      {/* ================= STICKY NAVIGATION ================= */}
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          isScrolled
+            ? "bg-white/95 backdrop-blur-md shadow-md border-b border-border/50"
+            : "bg-white border-b border-border/30"
+        }`}
+      >
         <div className="container-max-width">
-          <div className="flex items-center justify-between py-4 md:py-5">
-            {/* Logo & Brand */}
-            <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => navigate("/")}>
-              <img src="/logo.svg" alt="EdTech Solutions" className="h-14 w-auto" />
-            </div>
+          <div className="flex items-center justify-between py-3 md:py-4">
+            {/* Logo */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-3 flex-shrink-0 cursor-pointer"
+              onClick={() => navigate("/")}
+            >
+              <img
+                src="/logo.jpg"
+                alt="EdTech Solutions"
+                className="h-12 md:h-14 w-auto object-contain"
+              />
+            </motion.div>
 
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center gap-1">
-              {navLinks.map((link) => (
-                <a
+              {navLinks.map((link, index) => (
+                <motion.a
                   key={link.href}
                   href={link.href}
-                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
                     isActive(link.href)
-                      ? "text-primary bg-primary/10 border border-primary/20"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      ? "text-secondary bg-secondary/10"
+                      : "text-foreground/70 hover:text-foreground hover:bg-muted"
                   }`}
                 >
                   {link.label}
-                </a>
+                </motion.a>
               ))}
             </nav>
 
@@ -57,17 +89,19 @@ const MainLayout = ({ children }: MainLayoutProps) => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="hidden sm:inline-flex text-muted-foreground hover:text-foreground"
+                className="hidden md:inline-flex text-foreground/70 hover:text-foreground font-medium"
                 onClick={() => navigate("/login")}
               >
                 Login
               </Button>
               <Button
                 size="sm"
-                className="btn-primary text-sm md:text-base px-4 md:px-6"
+                className="btn-primary rounded-full px-6"
                 onClick={() => navigate("/programs")}
               >
-                Apply Now
+                <span className="hidden sm:inline">Apply Now</span>
+                <span className="sm:hidden">Apply</span>
+                <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
 
               {/* Mobile Menu Button */}
@@ -88,85 +122,111 @@ const MainLayout = ({ children }: MainLayoutProps) => {
       </header>
 
       {/* ================= MOBILE MENU ================= */}
-      {isMenuOpen && (
-        <nav className="lg:hidden bg-card border-b border-border/50 shadow-md animate-in slide-in-from-top-2 duration-300">
-          <div className="container-max-width py-4 space-y-2">
-            {navLinks.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={() => setIsMenuOpen(false)}
-                className={`block px-4 py-3 rounded-lg font-medium transition-all duration-300 ${
-                  isActive(link.href)
-                    ? "text-primary bg-primary/10 border border-primary/20"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                {link.label}
-              </a>
-            ))}
-            <div className="border-t border-border/50 pt-4 mt-4 space-y-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => {
-                  navigate("/login");
-                  setIsMenuOpen(false);
-                }}
-              >
-                Login
-              </Button>
-              <Button
-                size="sm"
-                className="btn-primary w-full"
-                onClick={() => {
-                  navigate("/programs");
-                  setIsMenuOpen(false);
-                }}
-              >
-                Apply Now
-              </Button>
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.nav
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="lg:hidden bg-white border-b border-border shadow-lg overflow-hidden"
+          >
+            <div className="container-max-width py-4 space-y-1">
+              {navLinks.map((link, index) => (
+                <motion.a
+                  key={link.href}
+                  href={link.href}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`block px-4 py-3 rounded-lg font-medium transition-all duration-300 ${
+                    isActive(link.href)
+                      ? "text-secondary bg-secondary/10"
+                      : "text-foreground/70 hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {link.label}
+                </motion.a>
+              ))}
+              <div className="border-t border-border pt-4 mt-4 space-y-3 px-4">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    navigate("/login");
+                    setIsMenuOpen(false);
+                  }}
+                >
+                  Login
+                </Button>
+                <Button
+                  className="btn-primary w-full"
+                  onClick={() => {
+                    navigate("/programs");
+                    setIsMenuOpen(false);
+                  }}
+                >
+                  Apply Now
+                </Button>
+              </div>
             </div>
-          </div>
-        </nav>
-      )}
+          </motion.nav>
+        )}
+      </AnimatePresence>
 
       {/* ================= MAIN CONTENT ================= */}
-      <main className="flex-grow">
-        {children}
-      </main>
+      <main className="flex-grow">{children}</main>
 
       {/* ================= PROFESSIONAL FOOTER ================= */}
-      <footer className="bg-gradient-to-r from-foreground/95 to-foreground text-white mt-20">
-        <div className="container-max-width section-padding">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
+      <footer className="bg-primary text-white">
+        {/* Main Footer Content */}
+        <div className="container-max-width section-padding-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-12">
             {/* Brand Section */}
-            <div className="space-y-4">
-              <img src="/logo.svg" alt="EdTech Solutions" className="h-20 w-auto" />
-              <p className="text-white/70 leading-relaxed text-sm">
-                Empowering secondary and TVET students with world-class ICT training and professional development opportunities.
+            <div className="lg:col-span-1">
+              <img
+                src="/logo.jpg"
+                alt="EdTech Solutions"
+                className="h-16 w-auto mb-6 bg-white p-2 rounded-lg"
+              />
+              <p className="text-white/70 leading-relaxed text-sm mb-6">
+                Innovating ICT Learning for the Future. Empowering secondary and TVET students with world-class training and career opportunities in Rwanda.
               </p>
-              <div className="flex gap-3 pt-4">
-                <a href="#" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors duration-300">
-                  <Linkedin className="w-5 h-5" />
-                </a>
-                <a href="#" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors duration-300">
-                  <Twitter className="w-5 h-5" />
-                </a>
-                <a href="#" className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors duration-300">
-                  <Facebook className="w-5 h-5" />
-                </a>
+              <div className="flex gap-3">
+                {[
+                  { icon: Facebook, href: "#" },
+                  { icon: Twitter, href: "#" },
+                  { icon: Instagram, href: "#" },
+                  { icon: Linkedin, href: "#" },
+                ].map((social, i) => (
+                  <a
+                    key={i}
+                    href={social.href}
+                    className="w-10 h-10 rounded-full bg-white/10 hover:bg-secondary flex items-center justify-center transition-all duration-300"
+                  >
+                    <social.icon className="w-4 h-4" />
+                  </a>
+                ))}
               </div>
             </div>
 
-            {/* Quick Links */}
+            {/* Programs */}
             <div>
-              <h4 className="font-bold text-lg mb-6 text-white">Programs</h4>
+              <h4 className="font-display font-bold text-lg mb-6">Programs</h4>
               <ul className="space-y-3">
-                {["Web Development", "Networking", "Cybersecurity", "Mobile App Dev", "Data Analytics"].map((item) => (
+                {[
+                  "Web Development",
+                  "Networking & IT",
+                  "Cybersecurity",
+                  "Mobile App Development",
+                  "Data Analytics",
+                  "Digital Marketing",
+                ].map((item) => (
                   <li key={item}>
-                    <a href="/programs" className="text-white/70 hover:text-white transition-colors duration-300 text-sm font-medium">
+                    <a
+                      href="/programs"
+                      className="text-white/70 hover:text-white hover:translate-x-1 inline-block transition-all duration-300 text-sm"
+                    >
                       {item}
                     </a>
                   </li>
@@ -174,21 +234,23 @@ const MainLayout = ({ children }: MainLayoutProps) => {
               </ul>
             </div>
 
-            {/* Company Links */}
+            {/* Quick Links */}
             <div>
-              <h4 className="font-bold text-lg mb-6 text-white">Company</h4>
+              <h4 className="font-display font-bold text-lg mb-6">Quick Links</h4>
               <ul className="space-y-3">
                 {[
-                  { label: "About Us", href: "/" },
-                  { label: "Services", href: "/services" },
-                  { label: "Gallery", href: "/gallery" },
-                  { label: "Vacancies", href: "/vacancies" },
-                  { label: "News", href: "/announcements" },
-                  { label: "Contact", href: "/contact" },
-                  { label: "Login", href: "/login" }
+                  { label: "About Us", href: "/#about" },
+                  { label: "Our Services", href: "/services" },
+                  { label: "Photo Gallery", href: "/gallery" },
+                  { label: "Career Opportunities", href: "/vacancies" },
+                  { label: "Latest News", href: "/announcements" },
+                  { label: "Contact Us", href: "/contact" },
                 ].map((item) => (
                   <li key={item.label}>
-                    <a href={item.href} className="text-white/70 hover:text-white transition-colors duration-300 text-sm font-medium">
+                    <a
+                      href={item.href}
+                      className="text-white/70 hover:text-white hover:translate-x-1 inline-block transition-all duration-300 text-sm"
+                    >
                       {item.label}
                     </a>
                   </li>
@@ -198,50 +260,58 @@ const MainLayout = ({ children }: MainLayoutProps) => {
 
             {/* Contact Info */}
             <div>
-              <h4 className="font-bold text-lg mb-6 text-white">Contact</h4>
+              <h4 className="font-display font-bold text-lg mb-6">Contact Us</h4>
               <div className="space-y-4">
-                <div className="flex gap-3 items-start">
-                  <Phone className="w-5 h-5 text-secondary flex-shrink-0 mt-0.5" />
+                <div className="flex gap-4 items-start">
+                  <div className="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-4 h-4 text-secondary" />
+                  </div>
                   <div>
-                    <p className="text-white/70 text-sm font-medium">+250 789 402 303</p>
-                    <p className="text-white/50 text-xs">Available 8 AM - 6 PM</p>
+                    <p className="text-white font-medium text-sm">+250 789 402 303</p>
+                    <p className="text-white/50 text-xs">Mon - Fri, 8AM - 6PM</p>
                   </div>
                 </div>
-                <div className="flex gap-3 items-start">
-                  <Mail className="w-5 h-5 text-secondary flex-shrink-0 mt-0.5" />
+                <div className="flex gap-4 items-start">
+                  <div className="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-4 h-4 text-secondary" />
+                  </div>
                   <div>
-                    <p className="text-white/70 text-sm font-medium">info@edtechsolutions.rw</p>
+                    <p className="text-white font-medium text-sm">info@edtechsolutions.rw</p>
+                    <p className="text-white/50 text-xs">We reply within 24 hours</p>
                   </div>
                 </div>
-                <div className="flex gap-3 items-start">
-                  <MapPin className="w-5 h-5 text-secondary flex-shrink-0 mt-0.5" />
+                <div className="flex gap-4 items-start">
+                  <div className="w-10 h-10 rounded-full bg-secondary/20 flex items-center justify-center flex-shrink-0">
+                    <MapPin className="w-4 h-4 text-secondary" />
+                  </div>
                   <div>
-                    <p className="text-white/70 text-sm font-medium">Kigali, Rwanda</p>
+                    <p className="text-white font-medium text-sm">Kigali, Rwanda</p>
                     <p className="text-white/50 text-xs">Gasabo District</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Divider */}
-          <div className="border-t border-white/10 pt-8"></div>
-
-          {/* Bottom Bar */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-white/60 text-sm">
-              © 2026 EdTech Solutions. All rights reserved.
-            </p>
-            <div className="flex gap-6 text-sm">
-              <a href="#" className="text-white/60 hover:text-white transition-colors duration-300">
-                Privacy Policy
-              </a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors duration-300">
-                Terms of Service
-              </a>
-              <a href="#" className="text-white/60 hover:text-white transition-colors duration-300">
-                Cookie Policy
-              </a>
+        {/* Bottom Bar */}
+        <div className="border-t border-white/10">
+          <div className="container-max-width py-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <p className="text-white/60 text-sm text-center md:text-left">
+                © {new Date().getFullYear()} EdTech Solutions. All rights reserved.
+              </p>
+              <div className="flex flex-wrap justify-center gap-6 text-sm">
+                <a href="#" className="text-white/60 hover:text-white transition-colors duration-300">
+                  Privacy Policy
+                </a>
+                <a href="#" className="text-white/60 hover:text-white transition-colors duration-300">
+                  Terms of Service
+                </a>
+                <a href="#" className="text-white/60 hover:text-white transition-colors duration-300">
+                  Cookie Policy
+                </a>
+              </div>
             </div>
           </div>
         </div>

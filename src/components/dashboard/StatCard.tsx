@@ -10,7 +10,7 @@ interface StatCardProps {
     label: string;
   };
   icon: LucideIcon;
-  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning';
+  variant?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'info';
   delay?: number;
 }
 
@@ -20,6 +20,7 @@ const variantStyles = {
   secondary: 'bg-secondary text-secondary-foreground',
   success: 'bg-success text-success-foreground',
   warning: 'bg-warning text-warning-foreground',
+  info: 'bg-info text-info-foreground',
 };
 
 const iconStyles = {
@@ -28,6 +29,7 @@ const iconStyles = {
   secondary: 'bg-white/20 text-white',
   success: 'bg-white/20 text-white',
   warning: 'bg-white/20 text-white',
+  info: 'bg-white/20 text-white',
 };
 
 export const StatCard = ({

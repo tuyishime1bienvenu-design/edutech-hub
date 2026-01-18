@@ -32,8 +32,6 @@ export const WelcomeCard = ({ subtitle }: WelcomeCardProps) => {
         return 'Review payments, manage fees, and analyze financial reports.';
       case 'student':
         return 'Check your schedule, view learning materials, and track your progress.';
-      case 'it':
-        return 'Manage IT equipment, materials inventory, and network infrastructure.';
       default:
         return 'Welcome to the ITMS dashboard.';
     }
@@ -46,7 +44,6 @@ export const WelcomeCard = ({ subtitle }: WelcomeCardProps) => {
       trainer: { label: 'Trainer', icon: BookOpen, bgColor: 'bg-gradient-to-r from-green-500 to-emerald-500' },
       finance: { label: 'Finance Officer', icon: Wallet, bgColor: 'bg-gradient-to-r from-yellow-500 to-orange-500' },
       student: { label: 'Student', icon: Award, bgColor: 'bg-gradient-to-r from-indigo-500 to-blue-500' },
-      it: { label: 'IT Manager', icon: Shield, bgColor: 'bg-gradient-to-r from-gray-500 to-slate-500' },
     };
     
     if (roles.length > 1) {
