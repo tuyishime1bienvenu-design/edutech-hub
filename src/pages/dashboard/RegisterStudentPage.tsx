@@ -29,10 +29,6 @@ const RegisterStudentPage = () => {
     hasWhatsapp: false,
     alternativeWhatsapp: '',
     classId: 'unassigned' as string,
-    applicationLetterSubmitted: false,
-    computerOwned: false,
-    computerDetails: '',
-    logbookReceived: false,
   });
 
   const [registrationComplete, setRegistrationComplete] = useState<{
@@ -45,26 +41,20 @@ const RegisterStudentPage = () => {
   const { toast } = useToast();
 
   const { data: classes = [] } = useQuery({
-    queryKey: ['available-classes', formData.level, formData.preferredShift, formData.computerOwned],
+    queryKey: ['available-classes', formData.level, formData.preferredShift],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('classes')
-        .select('id, name, level, shift, current_enrollment, max_capacity, requires_computer')
+        .select('id, name, level, shift, current_enrollment, max_capacity')
         .eq('is_active', true)
         .eq('level', formData.level)
         .eq('shift', formData.preferredShift);
 
       if (error) throw error;
 
-      let filteredClasses = (data ?? []).filter(
+      return (data ?? []).filter(
         c => (c.current_enrollment || 0) < c.max_capacity
       );
-
-      if (!formData.computerOwned) {
-        filteredClasses = filteredClasses.filter(c => !c.requires_computer);
-      }
-
-      return filteredClasses;
     },
     enabled: !!formData.level && !!formData.preferredShift,
   });
@@ -120,28 +110,28 @@ const RegisterStudentPage = () => {
           has_whatsapp: data.hasWhatsapp,
           alternative_whatsapp: data.alternativeWhatsapp || null,
           class_id: data.classId === 'unassigned' ? null : data.classId,
-          application_letter_submitted: data.applicationLetterSubmitted,
-          computer_owned: data.computerOwned,
-          computer_details: data.computerDetails || null,
-          logbook_received: data.logbookReceived,
           generated_password: password,
           is_active: true,
         });
 
       if (studentError) {
-        // If student creation fails, we should ideally delete the auth user
-        // but for now we'll just throw the error
         throw new Error(`Failed to create student record: ${studentError.message}`);
       }
 
       // Step 3: Update class enrollment if assigned
       if (data.classId !== 'unassigned') {
-        const { error: classError } = await supabase.rpc('increment_class_enrollment', {
-          class_id: data.classId,
-        });
-
-        if (classError) {
-          console.error('Failed to update class enrollment:', classError);
+        // Manually increment enrollment
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('current_enrollment')
+          .eq('id', data.classId)
+          .single();
+        
+        if (classData) {
+          await supabase
+            .from('classes')
+            .update({ current_enrollment: (classData.current_enrollment || 0) + 1 })
+            .eq('id', data.classId);
         }
       }
 
@@ -151,9 +141,6 @@ const RegisterStudentPage = () => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
       queryClient.invalidateQueries({ queryKey: ['classes'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['recent-activity'] });
-      queryClient.invalidateQueries({ queryKey: ['all-students'] });
-      queryClient.invalidateQueries({ queryKey: ['class-students'] });
       setRegistrationComplete(result);
       toast({ title: 'Student registered successfully!' });
     },
@@ -182,10 +169,6 @@ const RegisterStudentPage = () => {
       hasWhatsapp: false,
       alternativeWhatsapp: '',
       classId: 'unassigned',
-      applicationLetterSubmitted: false,
-      computerOwned: false,
-      computerDetails: '',
-      logbookReceived: false,
     });
     setRegistrationComplete(null);
   };
@@ -397,126 +380,46 @@ const RegisterStudentPage = () => {
                   </div>
                 </div>
 
-                {/* Internship Information */}
+                {/* Class Assignment */}
                 <div className="space-y-4 pt-4 border-t">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <FileText className="w-5 h-5 text-primary" />
-                    Internship Program Information
+                    Class Assignment
                   </h3>
 
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="applicationLetterSubmitted"
-                        checked={formData.applicationLetterSubmitted}
-                        onCheckedChange={(checked) =>
-                          setFormData({ ...formData, applicationLetterSubmitted: checked as boolean })
-                        }
-                      />
-                      <Label htmlFor="applicationLetterSubmitted" className="cursor-pointer">
-                        Application letter submitted
-                      </Label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="computerOwned"
-                        checked={formData.computerOwned}
-                        onCheckedChange={(checked) =>
-                          setFormData({ ...formData, computerOwned: checked as boolean })
-                        }
-                      />
-                      <Label htmlFor="computerOwned" className="cursor-pointer">
-                        Student owns a computer
-                      </Label>
-                    </div>
-
-                    {formData.computerOwned && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="space-y-2"
-                      >
-                        <Label htmlFor="computerDetails">Computer Details</Label>
-                        <Textarea
-                          id="computerDetails"
-                          value={formData.computerDetails}
-                          onChange={(e) =>
-                            setFormData({ ...formData, computerDetails: e.target.value })
-                          }
-                          placeholder="Describe the computer specifications (e.g., laptop/desktop, processor, RAM, etc.)"
-                          rows={3}
-                        />
-                      </motion.div>
-                    )}
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="logbookReceived"
-                        checked={formData.logbookReceived}
-                        onCheckedChange={(checked) =>
-                          setFormData({ ...formData, logbookReceived: checked as boolean })
-                        }
-                      />
-                      <Label htmlFor="logbookReceived" className="cursor-pointer">
-                        Logbook received
-                      </Label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Assign to Class (Optional)</Label>
-                  <Select
-                    value={formData.classId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, classId: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a class or leave unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">
-                        Unassigned (assign later)
-                      </SelectItem>
-                      {classes.length > 0 ? (
-                        classes.map((c) => (
+                  <div className="space-y-2">
+                    <Label>Assign to Class (Optional)</Label>
+                    <Select
+                      value={formData.classId}
+                      onValueChange={(value) => setFormData({ ...formData, classId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">No class (assign later)</SelectItem>
+                        {classes.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
-                            {c.name} ({c.current_enrollment || 0}/{c.max_capacity} students)
-                            {c.requires_computer && ' 💻'}
+                            {c.name} ({c.current_enrollment || 0}/{c.max_capacity})
                           </SelectItem>
-                        ))
-                      ) : null}
-                    </SelectContent>
-                  </Select>
-                  {classes.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      No available classes for {formData.level} {formData.preferredShift} shift
-                      {!formData.computerOwned && ' that don\'t require computers'}
-                    </p>
-                  )}
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {classes.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No available classes for selected level and shift
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <Button
                 type="submit"
                 className="w-full"
-                size="lg"
                 disabled={registerMutation.isPending}
               >
-                {registerMutation.isPending ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                    Registering Student...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Register Student
-                  </>
-                )}
+                {registerMutation.isPending ? 'Registering...' : 'Register Student'}
               </Button>
             </form>
           </CardContent>

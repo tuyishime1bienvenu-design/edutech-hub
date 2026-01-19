@@ -186,6 +186,114 @@ export type Database = {
           },
         ]
       }
+      contact_messages: {
+        Row: {
+          created_at: string
+          email: string
+          first_name: string
+          id: string
+          inquiry_type: string | null
+          last_name: string
+          message: string
+          phone: string | null
+          replied_at: string | null
+          replied_by: string | null
+          reply: string | null
+          status: string | null
+          subject: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          first_name: string
+          id?: string
+          inquiry_type?: string | null
+          last_name: string
+          message: string
+          phone?: string | null
+          replied_at?: string | null
+          replied_by?: string | null
+          reply?: string | null
+          status?: string | null
+          subject: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          first_name?: string
+          id?: string
+          inquiry_type?: string | null
+          last_name?: string
+          message?: string
+          phone?: string | null
+          replied_at?: string | null
+          replied_by?: string | null
+          reply?: string | null
+          status?: string | null
+          subject?: string
+        }
+        Relationships: []
+      }
+      equipment: {
+        Row: {
+          assigned_to: string | null
+          assigned_to_id: string | null
+          category: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          location: string | null
+          model: string | null
+          name: string
+          notes: string | null
+          purchase_cost: number | null
+          purchase_date: string | null
+          serial_number: string | null
+          status: string | null
+          updated_at: string
+          warranty_expiry: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          assigned_to_id?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          location?: string | null
+          model?: string | null
+          name: string
+          notes?: string | null
+          purchase_cost?: number | null
+          purchase_date?: string | null
+          serial_number?: string | null
+          status?: string | null
+          updated_at?: string
+          warranty_expiry?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          assigned_to_id?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          location?: string | null
+          model?: string | null
+          name?: string
+          notes?: string | null
+          purchase_cost?: number | null
+          purchase_date?: string | null
+          serial_number?: string | null
+          status?: string | null
+          updated_at?: string
+          warranty_expiry?: string | null
+        }
+        Relationships: []
+      }
       fee_structures: {
         Row: {
           created_at: string
@@ -226,6 +334,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      gallery_images: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          display_order: number | null
+          id: string
+          image_url: string
+          is_active: boolean | null
+          tags: string[] | null
+          title: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          image_url: string
+          is_active?: boolean | null
+          tags?: string[] | null
+          title: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number | null
+          id?: string
+          image_url?: string
+          is_active?: boolean | null
+          tags?: string[] | null
+          title?: string
+        }
+        Relationships: []
       }
       learning_materials: {
         Row: {
@@ -303,6 +450,122 @@ export type Database = {
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["leave_status"] | null
           trainer_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      material_transactions: {
+        Row: {
+          created_at: string
+          id: string
+          is_returned: boolean | null
+          material_id: string
+          notes: string | null
+          purpose: string | null
+          quantity: number
+          recipient_id: string | null
+          recipient_name: string | null
+          recorded_by: string | null
+          return_date: string | null
+          return_notes: string | null
+          total_cost: number | null
+          transaction_date: string
+          transaction_type: string
+          unit_cost: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_returned?: boolean | null
+          material_id: string
+          notes?: string | null
+          purpose?: string | null
+          quantity: number
+          recipient_id?: string | null
+          recipient_name?: string | null
+          recorded_by?: string | null
+          return_date?: string | null
+          return_notes?: string | null
+          total_cost?: number | null
+          transaction_date?: string
+          transaction_type: string
+          unit_cost?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_returned?: boolean | null
+          material_id?: string
+          notes?: string | null
+          purpose?: string | null
+          quantity?: number
+          recipient_id?: string | null
+          recipient_name?: string | null
+          recorded_by?: string | null
+          return_date?: string | null
+          return_notes?: string | null
+          total_cost?: number | null
+          transaction_date?: string
+          transaction_type?: string
+          unit_cost?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_transactions_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materials_inventory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      materials_inventory: {
+        Row: {
+          barcode: string | null
+          category: string | null
+          created_at: string
+          current_quantity: number | null
+          description: string | null
+          id: string
+          location: string | null
+          minimum_quantity: number | null
+          name: string
+          supplier: string | null
+          type: string | null
+          unit: string | null
+          unit_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          barcode?: string | null
+          category?: string | null
+          created_at?: string
+          current_quantity?: number | null
+          description?: string | null
+          id?: string
+          location?: string | null
+          minimum_quantity?: number | null
+          name: string
+          supplier?: string | null
+          type?: string | null
+          unit?: string | null
+          unit_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          barcode?: string | null
+          category?: string | null
+          created_at?: string
+          current_quantity?: number | null
+          description?: string | null
+          id?: string
+          location?: string | null
+          minimum_quantity?: number | null
+          name?: string
+          supplier?: string | null
+          type?: string | null
+          unit?: string | null
+          unit_cost?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -531,6 +794,45 @@ export type Database = {
         }
         Relationships: []
       }
+      services: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string
+          display_order: number | null
+          features: string[] | null
+          icon: string | null
+          id: string
+          is_active: boolean | null
+          price: string | null
+          title: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description: string
+          display_order?: number | null
+          features?: string[] | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          price?: string | null
+          title: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string
+          display_order?: number | null
+          features?: string[] | null
+          icon?: string | null
+          id?: string
+          is_active?: boolean | null
+          price?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
       students: {
         Row: {
           alternative_whatsapp: string | null
@@ -614,6 +916,138 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      vacancies: {
+        Row: {
+          benefits: string[] | null
+          created_at: string
+          created_by: string | null
+          deadline: string | null
+          department: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          location: string | null
+          requirements: string[] | null
+          responsibilities: string[] | null
+          salary_max: number | null
+          salary_min: number | null
+          title: string
+          type: string | null
+        }
+        Insert: {
+          benefits?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          deadline?: string | null
+          department: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          location?: string | null
+          requirements?: string[] | null
+          responsibilities?: string[] | null
+          salary_max?: number | null
+          salary_min?: number | null
+          title: string
+          type?: string | null
+        }
+        Update: {
+          benefits?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          deadline?: string | null
+          department?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          location?: string | null
+          requirements?: string[] | null
+          responsibilities?: string[] | null
+          salary_max?: number | null
+          salary_min?: number | null
+          title?: string
+          type?: string | null
+        }
+        Relationships: []
+      }
+      visitors: {
+        Row: {
+          created_at: string
+          departure_time: string | null
+          email: string | null
+          full_name: string
+          host_name: string | null
+          id: string
+          notes: string | null
+          organization: string | null
+          phone: string | null
+          purpose: string
+          recorded_by: string | null
+          visited_at: string
+        }
+        Insert: {
+          created_at?: string
+          departure_time?: string | null
+          email?: string | null
+          full_name: string
+          host_name?: string | null
+          id?: string
+          notes?: string | null
+          organization?: string | null
+          phone?: string | null
+          purpose: string
+          recorded_by?: string | null
+          visited_at?: string
+        }
+        Update: {
+          created_at?: string
+          departure_time?: string | null
+          email?: string | null
+          full_name?: string
+          host_name?: string | null
+          id?: string
+          notes?: string | null
+          organization?: string | null
+          phone?: string | null
+          purpose?: string
+          recorded_by?: string | null
+          visited_at?: string
+        }
+        Relationships: []
+      }
+      wifi_networks: {
+        Row: {
+          assigned_roles: string[] | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          password: string
+        }
+        Insert: {
+          assigned_roles?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          password: string
+        }
+        Update: {
+          assigned_roles?: string[] | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          password?: string
         }
         Relationships: []
       }
