@@ -1,5 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 interface CertificateTemplate {
@@ -39,20 +37,6 @@ interface CertificateDisplayProps {
 }
 
 const CertificateDisplay = ({ student, template }: CertificateDisplayProps) => {
-  // Get issued certificate details
-  const { data: issuedCertificate } = useQuery({
-    queryKey: ['issued-certificate', student.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('issued_certificates')
-        .select('*')
-        .eq('student_id', student.id)
-        .single();
-      if (error && error.code !== 'PGRST116') throw error;
-      return data;
-    },
-  });
-
   const studentName = student.profile?.full_name || 'Student Name';
   const programName = student.classes?.programs?.name || student.classes?.name || 'Program';
   const startDate = student.classes?.programs?.start_date
@@ -61,11 +45,8 @@ const CertificateDisplay = ({ student, template }: CertificateDisplayProps) => {
   const endDate = student.classes?.programs?.end_date
     ? format(new Date(student.classes.programs.end_date), 'MMMM d, yyyy')
     : 'Program End';
-  const issueDate = issuedCertificate?.issued_date
-    ? format(new Date(issuedCertificate.issued_date), 'MMMM d, yyyy')
-    : format(new Date(), 'MMMM d, yyyy');
+  const issueDate = format(new Date(), 'MMMM d, yyyy');
 
-  // Use company logo from public folder
   const logoUrl = '/logo.jpg';
 
   return (
@@ -146,7 +127,7 @@ const CertificateDisplay = ({ student, template }: CertificateDisplayProps) => {
               <div className="w-48 h-0.5 bg-amber-600 mx-auto mb-2"></div>
               <p className="text-sm font-bold text-blue-900 uppercase">DR. EMILY ROBERTS</p>
               <p className="text-xs text-gray-700">Dean, Faculty of Arts & Design</p>
-              <p className="text-xs text-gray-700">Brightway University</p>
+              <p className="text-xs text-gray-700">EdTech Solutions</p>
             </div>
 
             {/* Center Logo/Seal */}
@@ -157,15 +138,14 @@ const CertificateDisplay = ({ student, template }: CertificateDisplayProps) => {
                   alt="Company Logo"
                   className="w-full h-full object-contain p-2"
                   onError={(e) => {
-                    // Fallback if logo not found
                     const target = e.target as HTMLImageElement;
                     target.style.display = 'none';
                     if (target.parentElement) {
                       target.parentElement.innerHTML = `
                         <div class="text-center">
-                          <p class="text-xs font-bold text-blue-900 mb-1">TOP UNIVERSITY</p>
-                          <p class="text-2xl font-bold text-blue-900">AWARD</p>
-                          <p class="text-xs font-bold text-blue-900 mt-1">2026 GRADUATES</p>
+                          <p class="text-xs font-bold text-blue-900 mb-1">EDTECH</p>
+                          <p class="text-2xl font-bold text-blue-900">SOLUTIONS</p>
+                          <p class="text-xs font-bold text-blue-900 mt-1">2026</p>
                         </div>
                       `;
                     }
@@ -179,7 +159,7 @@ const CertificateDisplay = ({ student, template }: CertificateDisplayProps) => {
               <div className="w-48 h-0.5 bg-amber-600 mx-auto mb-2"></div>
               <p className="text-sm font-bold text-blue-900 uppercase">DR. ANDREW KRAMER</p>
               <p className="text-xs text-gray-700">President</p>
-              <p className="text-xs text-gray-700">Brightway University</p>
+              <p className="text-xs text-gray-700">EdTech Solutions</p>
             </div>
           </div>
 
@@ -191,11 +171,6 @@ const CertificateDisplay = ({ student, template }: CertificateDisplayProps) => {
             {template.include_registration_number && (
               <p className="text-xs text-gray-600 mt-2">
                 Registration Number: <strong>{student.registration_number}</strong>
-              </p>
-            )}
-            {issuedCertificate?.certificate_number && (
-              <p className="text-xs text-gray-600 mt-1">
-                Certificate Number: <strong>{issuedCertificate.certificate_number}</strong>
               </p>
             )}
           </div>

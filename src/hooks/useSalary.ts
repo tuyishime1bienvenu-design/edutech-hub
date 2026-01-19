@@ -11,10 +11,10 @@ export const useSalary = () => {
       const { data, error } = await supabase
         .from('salaries')
         .select('*')
-        .eq('user_id', user.user.id)
-        .single();
+        .eq('employee_id', user.user.id)
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      if (error) {
         throw error;
       }
 

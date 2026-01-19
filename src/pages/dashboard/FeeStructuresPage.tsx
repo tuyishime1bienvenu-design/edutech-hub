@@ -82,8 +82,8 @@ const FeeStructuresPage = () => {
     mutationFn: async (data: typeof formData) => {
       const payload = {
         name: data.name.trim(),
-        program_id: data.program_id && data.program_id !== '' && data.program_id !== 'none' ? data.program_id : null,
-        level: data.level && data.level !== '' && data.level !== 'none' ? data.level : null,
+        program_id: data.program_id && data.program_id !== 'none' ? data.program_id : null,
+        level: data.level && data.level !== 'none' ? (data.level as 'L3' | 'L4' | 'L5') : null,
         registration_fee: Number(data.registration_fee) || 0,
         internship_fee: Number(data.internship_fee) || 0,
         is_active: data.is_active,
