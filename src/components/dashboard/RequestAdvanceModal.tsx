@@ -35,11 +35,12 @@ export const RequestAdvanceModal = ({ salary, open, onOpenChange, showTrigger = 
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
 
+      // Use salary_advances table which exists in the schema
       const { error } = await supabase
-        .from('advance_requests')
+        .from('salary_advances')
         .insert({
-          user_id: user.user.id,
-          amount_requested: amount,
+          employee_id: user.user.id,
+          amount: amount,
           reason,
         });
 
@@ -50,7 +51,7 @@ export const RequestAdvanceModal = ({ salary, open, onOpenChange, showTrigger = 
       setModalOpen(false);
       setAmount('');
       setReason('');
-      queryClient.invalidateQueries({ queryKey: ['advance-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['salary-advances'] });
     },
     onError: (error) => {
       toast.error('Failed to submit advance request: ' + error.message);
@@ -64,7 +65,7 @@ export const RequestAdvanceModal = ({ salary, open, onOpenChange, showTrigger = 
       toast.error('Please enter a valid amount');
       return;
     }
-    if (numAmount > salary.amount) {
+    if (salary && numAmount > salary.amount) {
       toast.error('Requested amount cannot exceed your salary');
       return;
     }
@@ -91,12 +92,14 @@ export const RequestAdvanceModal = ({ salary, open, onOpenChange, showTrigger = 
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="Enter amount"
-              max={salary.amount}
+              max={salary?.amount}
               required
             />
-            <p className="text-sm text-gray-600 mt-1">
-              Maximum: RWF {salary.amount.toLocaleString()}
-            </p>
+            {salary && (
+              <p className="text-sm text-gray-600 mt-1">
+                Maximum: RWF {salary.amount?.toLocaleString() || 0}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="reason">Reason</Label>

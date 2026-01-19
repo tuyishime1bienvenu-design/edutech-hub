@@ -3,8 +3,6 @@ import { Users, GraduationCap, CreditCard, ClipboardList, TrendingUp, Award, Ale
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { useSalary } from '@/hooks/useSalary';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { WelcomeCard } from '@/components/dashboard/WelcomeCard';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -99,24 +97,6 @@ const AdminDashboard = ({ stats, isLoading }: any) => {
 };
 
 const SecretaryDashboard = ({ stats, isLoading }: any) => {
-  const { data: visitorStats } = useQuery({
-    queryKey: ['visitor-stats'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('visitors')
-        .select('id, visited_at')
-        .gte('visited_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString());
-      if (error) throw error;
-
-      const thisMonth = data?.length || 0;
-      const today = data?.filter(v => 
-        new Date(v.visited_at).toDateString() === new Date().toDateString()
-      ).length || 0;
-
-      return { thisMonth, today };
-    },
-  });
-
   return (
     <div className="space-y-6">
       <WelcomeCard />
@@ -151,9 +131,9 @@ const SecretaryDashboard = ({ stats, isLoading }: any) => {
           delay={0.2}
         />
         <StatCard
-          title="Visitors Today"
-          value={String(visitorStats?.today || 0)}
-          icon={UserPlus}
+          title="Active Programs"
+          value={isLoading ? '...' : String(stats?.activePrograms || 0)}
+          icon={BookOpen}
           variant="info"
           delay={0.3}
         />
@@ -172,15 +152,8 @@ const SecretaryDashboard = ({ stats, isLoading }: any) => {
 const TrainerDashboard = ({ stats, isLoading }: any) => {
   const { data: salary, isLoading: salaryLoading } = useSalary();
 
-  const formatSalary = (amount: number, period: string, customDays?: number) => {
-    const formattedAmount = `RWF ${amount.toLocaleString()}`;
-    switch (period) {
-      case 'daily': return `${formattedAmount}/day`;
-      case 'weekly': return `${formattedAmount}/week`;
-      case 'monthly': return `${formattedAmount}/month`;
-      case 'custom': return `${formattedAmount} every ${customDays} days`;
-      default: return formattedAmount;
-    }
+  const formatSalary = (amount: number) => {
+    return `RWF ${amount.toLocaleString()}/month`;
   };
 
   return (
@@ -218,7 +191,7 @@ const TrainerDashboard = ({ stats, isLoading }: any) => {
         />
         <StatCard
           title="My Salary"
-          value={salaryLoading ? '...' : salary ? formatSalary(salary.amount, salary.period, salary.custom_days) : 'Not set'}
+          value={salaryLoading ? '...' : salary ? formatSalary(salary.amount) : 'Not set'}
           icon={CreditCard}
           variant="info"
           delay={0.3}
@@ -333,64 +306,6 @@ const StudentDashboard = ({ stats, isLoading }: any) => {
   );
 };
 
-const ITDashboard = ({ stats, isLoading }: any) => {
-  const formatCurrency = (amount: number) => {
-    if (amount >= 1000000) return `RWF ${(amount / 1000000).toFixed(1)}M`;
-    if (amount >= 1000) return `RWF ${(amount / 1000).toFixed(0)}K`;
-    return `RWF ${amount}`;
-  };
-
-  return (
-    <div className="space-y-6">
-      <WelcomeCard />
-
-      {/* Role-specific insights */}
-      <RoleInsights />
-
-      {/* IT Stats Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-      >
-        <StatCard
-          title="Total Equipment"
-          value={isLoading ? '...' : String(stats?.totalEquipment || 0)}
-          icon={Briefcase}
-          variant="primary"
-          delay={0}
-        />
-        <StatCard
-          title="Active Equipment"
-          value={isLoading ? '...' : String(stats?.activeEquipment || 0)}
-          icon={TrendingUp}
-          delay={0.1}
-        />
-        <StatCard
-          title="Materials in Stock"
-          value={isLoading ? '...' : String(stats?.totalMaterials || 0)}
-          icon={BookOpen}
-          variant="secondary"
-          delay={0.2}
-        />
-        <StatCard
-          title="WiFi Networks"
-          value={isLoading ? '...' : String(stats?.totalWifiNetworks || 0)}
-          icon={AlertCircle}
-          delay={0.3}
-        />
-      </motion.div>
-
-      <QuickActions role="it" />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AttendanceChart />
-        <RecentActivityCard />
-      </div>
-    </div>
-  );
-};
-
 const CombinedDashboard = ({ stats, isLoading, roles }: any) => {
   const formatCurrency = (amount: number) => {
     if (amount >= 1000000) return `RWF ${(amount / 1000000).toFixed(1)}M`;
@@ -436,19 +351,6 @@ const CombinedDashboard = ({ stats, isLoading, roles }: any) => {
       );
     }
 
-    if (roles.includes('it')) {
-      allStats.push(
-        <StatCard
-          key="it-equipment"
-          title="Total Equipment"
-          value={isLoading ? '...' : String(stats?.totalEquipment || 0)}
-          icon={Briefcase}
-          variant="info"
-          delay={0.3}
-        />
-      );
-    }
-
     if (roles.includes('trainer')) {
       allStats.push(
         <StatCard
@@ -457,7 +359,7 @@ const CombinedDashboard = ({ stats, isLoading, roles }: any) => {
           value={isLoading ? '...' : String(stats?.activeClasses || 0)}
           icon={GraduationCap}
           variant="warning"
-          delay={0.4}
+          delay={0.3}
         />
       );
     }
@@ -498,71 +400,61 @@ const CombinedDashboard = ({ stats, isLoading, roles }: any) => {
 };
 
 const DashboardHome = () => {
-  const { roles, primaryRole } = useAuth();
+  const { roles } = useAuth();
   const { data: stats, isLoading } = useDashboardStats();
 
-  // If user has multiple roles, show combined dashboard
+  // Handle multiple roles - show combined dashboard
   if (roles.length > 1) {
     return <CombinedDashboard stats={stats} isLoading={isLoading} roles={roles} />;
   }
 
-  // Return role-specific dashboard based on primary role
-  if (primaryRole === 'admin') {
-    return <AdminDashboard stats={stats} isLoading={isLoading} />;
-  } else if (primaryRole === 'secretary') {
-    return <SecretaryDashboard stats={stats} isLoading={isLoading} />;
-  } else if (primaryRole === 'trainer') {
-    return <TrainerDashboard stats={stats} isLoading={isLoading} />;
-  } else if (primaryRole === 'finance') {
-    return <FinanceDashboard stats={stats} isLoading={isLoading} />;
-  } else if (primaryRole === 'student') {
-    return <StudentDashboard stats={stats} isLoading={isLoading} />;
-  } else if (primaryRole === 'it') {
-    return <ITDashboard stats={stats} isLoading={isLoading} />;
-  }
+  // Single role dashboards
+  const primaryRole = roles[0] || 'student';
 
-  // Default fallback
-  return <AdminDashboard stats={stats} isLoading={isLoading} />;
+  switch (primaryRole) {
+    case 'admin':
+      return <AdminDashboard stats={stats} isLoading={isLoading} />;
+    case 'secretary':
+      return <SecretaryDashboard stats={stats} isLoading={isLoading} />;
+    case 'trainer':
+      return <TrainerDashboard stats={stats} isLoading={isLoading} />;
+    case 'finance':
+      return <FinanceDashboard stats={stats} isLoading={isLoading} />;
+    case 'student':
+      return <StudentDashboard stats={stats} isLoading={isLoading} />;
+    default:
+      return <StudentDashboard stats={stats} isLoading={isLoading} />;
+  }
 };
 
 const Dashboard = () => {
   return (
     <DashboardLayout>
       <Routes>
-        <Route index element={<DashboardHome />} />
-        <Route path="students" element={<StudentsPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="classes" element={<ClassesPage />} />
-        <Route path="programs" element={<ProgramsPage />} />
-        <Route path="attendance" element={<AttendancePage />} />
-        <Route path="record-visitor" element={<RecordVisitorPage />} />
-        <Route path="visitors" element={<VisitorsPage />} />
-        <Route path="finances" element={<FinancesPage />} />
-        <Route path="payments" element={<FinancesPage />} />
-        <Route path="fee-structures" element={<FeeStructuresPage />} />
-        <Route path="certificates" element={<CertificatesPage />} />
-        <Route path="certificate-templates" element={<CertificateTemplatesPage />} />
-        <Route path="services" element={<ServicesPage />} />
-        <Route path="vacancies" element={<VacanciesPage />} />
-        <Route path="gallery" element={<GalleryPage />} />
-        <Route path="contact-messages" element={<ContactMessagesPage />} />
-        <Route path="notices" element={<NoticesPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="logs" element={<ActivityLogsPage />} />
-        <Route path="register-student" element={<RegisterStudentPage />} />
-        {/* Fallback routes for other role-specific pages */}
-        <Route path="my-classes" element={<ClassesPage />} />
-        <Route path="materials" element={<MaterialsPage />} />
-        <Route path="request-advance" element={<RequestAdvancePage />} />
-        <Route path="leave" element={<LeaveRequestsPage />} />
-        <Route path="salaries" element={<FinancesPage />} />
-        <Route path="advances" element={<FinancesPage />} />
-        <Route path="schedule" element={<AttendancePage />} />
-        <Route path="it" element={<ITPage />} />
-        <Route path="equipment" element={<ITPage />} />
-        <Route path="materials-inventory" element={<ITPage />} />
-        <Route path="wifi-networks" element={<ITPage />} />
-        <Route path="material-transactions" element={<ITPage />} />
+        <Route path="/" element={<DashboardHome />} />
+        <Route path="/students" element={<StudentsPage />} />
+        <Route path="/register-student" element={<RegisterStudentPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/classes" element={<ClassesPage />} />
+        <Route path="/programs" element={<ProgramsPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/finances" element={<FinancesPage />} />
+        <Route path="/fee-structures" element={<FeeStructuresPage />} />
+        <Route path="/notices" element={<NoticesPage />} />
+        <Route path="/materials" element={<MaterialsPage />} />
+        <Route path="/leave-requests" element={<LeaveRequestsPage />} />
+        <Route path="/request-advance" element={<RequestAdvancePage />} />
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/activity-logs" element={<ActivityLogsPage />} />
+        <Route path="/certificate-templates" element={<CertificateTemplatesPage />} />
+        <Route path="/certificates" element={<CertificatesPage />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/vacancies" element={<VacanciesPage />} />
+        <Route path="/gallery" element={<GalleryPage />} />
+        <Route path="/contact-messages" element={<ContactMessagesPage />} />
+        <Route path="/record-visitor" element={<RecordVisitorPage />} />
+        <Route path="/visitors" element={<VisitorsPage />} />
+        <Route path="/it" element={<ITPage />} />
       </Routes>
     </DashboardLayout>
   );
