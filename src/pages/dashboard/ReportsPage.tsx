@@ -13,19 +13,18 @@ import {
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { Badge } from '@/components/ui/badge';
 
-const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'];
-
 const ReportsPage = () => {
   const [dateRange, setDateRange] = useState('30');
   const { primaryRole, user } = useAuth();
   const queryClient = useQueryClient();
   const [reportClassId, setReportClassId] = useState('');
   const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0,10));
-  // topicsCovered replaced by `topics` (list) and `newTopic`
   const [presentCount, setPresentCount] = useState<number | ''>('');
-
-  // trainer-only toggle and client-side paginated reports table
   const [onlyMine, setOnlyMine] = useState<boolean>(false);
+  const { toast } = useToast();
+  const [topics, setTopics] = useState<string[]>([]);
+  const [newTopic, setNewTopic] = useState('');
+
   useEffect(() => {
     if (primaryRole === 'trainer') setOnlyMine(true);
   }, [primaryRole]);
@@ -47,11 +46,11 @@ const ReportsPage = () => {
       if (trainerIds.length > 0) {
         const { data: profiles, error: pErr } = await supabase
           .from('profiles')
-          .select('user_id, full_name, first_name, last_name, email')
+          .select('user_id, full_name, email')
           .in('user_id', trainerIds as any[]);
         if (pErr) throw pErr;
         (profiles || []).forEach((p: any) => {
-          const name = p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email || p.user_id;
+          const name = p.full_name || p.email || p.user_id;
           profilesMap[p.user_id] = name;
         });
       }
@@ -63,7 +62,6 @@ const ReportsPage = () => {
     },
   });
 
-  // pagination state
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   useEffect(() => setPage(1), [onlyMine, pageSize]);
@@ -74,29 +72,18 @@ const ReportsPage = () => {
     return reports.slice(start, start + pageSize);
   }, [reports, page, pageSize]);
 
-  // trainer report creation state and queries
-  const { toast } = useToast();
-  const [topics, setTopics] = useState<string[]>([]);
-  const [newTopic, setNewTopic] = useState('');
-
+  // Fetch trainer's classes from the classes table where trainer_id matches
   const { data: trainerClasses } = useQuery({
     queryKey: ['trainer-classes', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data: ctData, error: ctError } = await supabase
-        .from('class_trainers')
-        .select('class_id')
-        .eq('trainer_id', user.id);
-      if (ctError) throw ctError;
-      const classIds = ctData?.map((c: any) => c.class_id) || [];
-      if (classIds.length === 0) return [];
       const { data, error } = await supabase
         .from('classes')
         .select('id, name')
-        .in('id', classIds)
+        .eq('trainer_id', user.id)
         .order('name');
       if (error) throw error;
-      return data;
+      return data || [];
     },
     enabled: !!user?.id && primaryRole === 'trainer',
   });
@@ -131,10 +118,6 @@ const ReportsPage = () => {
       toast({ title: 'Error', description: err.message || 'Failed to create report', variant: 'destructive' });
     }
   });
-
-  // (removed recent trainer reports; table displays all reports)
-
-  
 
   if (isLoadingReports) {
     return (
@@ -172,8 +155,8 @@ const ReportsPage = () => {
                 <Input type="number" placeholder="Present count" value={presentCount as any} onChange={(e) => setPresentCount(e.target.value === '' ? '' : parseInt(e.target.value))} />
               </div>
               <div>
-                <Button onClick={() => createReportMutation.mutate()} disabled={createReportMutation.isLoading}>
-                  {createReportMutation.isLoading ? 'Saving...' : 'Save Report'}
+                <Button onClick={() => createReportMutation.mutate()} disabled={createReportMutation.isPending}>
+                  {createReportMutation.isPending ? 'Saving...' : 'Save Report'}
                 </Button>
               </div>
               <div className="md:col-span-4">
@@ -202,7 +185,6 @@ const ReportsPage = () => {
               </div>
             </div>
           </CardContent>
-          
         </Card>
       )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -267,7 +249,6 @@ const ReportsPage = () => {
           </div>
         </CardContent>
       </Card>
-      {/* Pagination controls */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">Page {page} of {totalPages} — {reports?.length || 0} reports</div>
         <div className="flex items-center gap-2">

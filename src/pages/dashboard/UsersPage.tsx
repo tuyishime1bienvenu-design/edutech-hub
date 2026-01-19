@@ -24,6 +24,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
+type AppRole = 'admin' | 'secretary' | 'trainer' | 'finance' | 'student';
+
 const UsersPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -32,20 +34,20 @@ const UsersPage = () => {
     email: '',
     password: '',
     fullName: '',
-    roles: [] as ('admin' | 'secretary' | 'trainer' | 'finance' | 'student' | 'it')[],
+    roles: [] as AppRole[],
   });
   const [editUser, setEditUser] = useState({
     id: '',
+    userId: '',
     email: '',
     fullName: '',
-    roles: [] as ('admin' | 'secretary' | 'trainer' | 'finance' | 'student' | 'it')[],
+    roles: [] as AppRole[],
   });
   const [isSalaryDialogOpen, setIsSalaryDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [salaryData, setSalaryData] = useState({
     amount: '',
-    period: 'monthly' as 'daily' | 'weekly' | 'monthly' | 'custom',
-    custom_days: '',
+    payment_period: 'monthly',
   });
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -65,7 +67,7 @@ const UsersPage = () => {
 
       const { data: salaries } = await supabase
         .from('salaries')
-        .select('user_id, amount, period, custom_days');
+        .select('employee_id, amount, payment_period');
 
       // Group roles by user_id
       const rolesByUser = roles?.reduce((acc, role) => {
@@ -80,7 +82,7 @@ const UsersPage = () => {
         ...profile,
         roles: rolesByUser?.[profile.user_id] || [],
         primaryRole: rolesByUser?.[profile.user_id]?.[0] || null,
-        salary: salaries?.find(s => s.user_id === profile.user_id) || null,
+        salary: salaries?.find(s => s.employee_id === profile.user_id) || null,
       }));
 
       return usersWithRoles;
@@ -102,7 +104,6 @@ const UsersPage = () => {
       case 'trainer': return 'bg-green-100 text-green-800';
       case 'finance': return 'bg-purple-100 text-purple-800';
       case 'student': return 'bg-yellow-100 text-yellow-800';
-      case 'it': return 'bg-indigo-100 text-indigo-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -154,11 +155,11 @@ const UsersPage = () => {
 
       if (profileError) throw profileError;
 
-      // Update user roles
+      // Update user roles - delete existing and insert new
       const { error: deleteRolesError } = await supabase
         .from('user_roles')
         .delete()
-        .eq('user_id', userData.id);
+        .eq('user_id', userData.userId);
 
       if (deleteRolesError) throw deleteRolesError;
 
@@ -167,7 +168,7 @@ const UsersPage = () => {
           .from('user_roles')
           .insert(
             userData.roles.map(role => ({
-              user_id: userData.id,
+              user_id: userData.userId,
               role: role,
             }))
           );
@@ -180,7 +181,7 @@ const UsersPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setIsEditDialogOpen(false);
-      setEditUser({ id: '', email: '', fullName: '', roles: [] });
+      setEditUser({ id: '', userId: '', email: '', fullName: '', roles: [] });
       toast({ title: 'User updated successfully' });
     },
     onError: (error) => {
@@ -189,28 +190,53 @@ const UsersPage = () => {
   });
 
   const setSalaryMutation = useMutation({
-    mutationFn: async ({ userId, amount, period, customDays }: { userId: string; amount: number; period: string; customDays?: number }) => {
-      const { error } = await supabase
+    mutationFn: async ({ userId, amount, paymentPeriod }: { userId: string; amount: number; paymentPeriod: string }) => {
+      // Check if salary exists
+      const { data: existing } = await supabase
         .from('salaries')
-        .upsert({
-          user_id: userId,
-          amount,
-          period,
-          custom_days: period === 'custom' ? customDays : null,
-        });
-      if (error) throw error;
+        .select('id')
+        .eq('employee_id', userId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from('salaries')
+          .update({
+            amount,
+            payment_period: paymentPeriod,
+          })
+          .eq('employee_id', userId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('salaries')
+          .insert({
+            employee_id: userId,
+            amount,
+            payment_period: paymentPeriod,
+          });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setIsSalaryDialogOpen(false);
       setSelectedUser(null);
-      setSalaryData({ amount: '', period: 'monthly', custom_days: '' });
+      setSalaryData({ amount: '', payment_period: 'monthly' });
       toast({ title: 'Salary updated successfully' });
     },
     onError: (error) => {
       toast({ title: 'Error updating salary', description: error.message, variant: 'destructive' });
     },
   });
+
+  const availableRoles: { value: AppRole; label: string }[] = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'secretary', label: 'Secretary' },
+    { value: 'trainer', label: 'Trainer' },
+    { value: 'finance', label: 'Finance' },
+    { value: 'student', label: 'Student' },
+  ];
 
   if (isLoading) {
     return (
@@ -302,9 +328,9 @@ const UsersPage = () => {
                   <TableCell>
                     {user.salary ? (
                       <div className="text-sm">
-                        <div>RWF {user.salary.amount.toLocaleString()}</div>
+                        <div>RWF {user.salary.amount?.toLocaleString()}</div>
                         <div className="text-muted-foreground capitalize">
-                          {user.salary.period}{user.salary.period === 'custom' ? ` (${user.salary.custom_days}d)` : ''}
+                          {user.salary.payment_period}
                         </div>
                       </div>
                     ) : (
@@ -328,8 +354,7 @@ const UsersPage = () => {
                           setSelectedUser(user);
                           setSalaryData({
                             amount: user.salary?.amount?.toString() || '',
-                            period: user.salary?.period || 'monthly',
-                            custom_days: user.salary?.custom_days?.toString() || '',
+                            payment_period: user.salary?.payment_period || 'monthly',
                           });
                           setIsSalaryDialogOpen(true);
                         }}>
@@ -338,9 +363,10 @@ const UsersPage = () => {
                         <DropdownMenuItem onClick={() => {
                           setEditUser({
                             id: user.id,
+                            userId: user.user_id,
                             email: user.email,
                             fullName: user.full_name,
-                            roles: user.roles || [],
+                            roles: (user.roles || []) as AppRole[],
                           });
                           setIsEditDialogOpen(true);
                         }}>
@@ -359,6 +385,7 @@ const UsersPage = () => {
         </Table>
       </motion.div>
 
+      {/* Add User Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -397,21 +424,14 @@ const UsersPage = () => {
             <div className="space-y-2">
               <Label>Roles</Label>
               <div className="space-y-2">
-                {[
-                  { value: 'admin', label: 'Admin' },
-                  { value: 'secretary', label: 'Secretary' },
-                  { value: 'trainer', label: 'Trainer' },
-                  { value: 'finance', label: 'Finance' },
-                  { value: 'it', label: 'IT' },
-                  { value: 'student', label: 'Student' },
-                ].map((role) => (
+                {availableRoles.map((role) => (
                   <div key={role.value} className="flex items-center space-x-2">
                     <Checkbox
                       id={role.value}
-                      checked={newUser.roles.includes(role.value as any)}
+                      checked={newUser.roles.includes(role.value)}
                       onCheckedChange={(checked) => {
                         if (checked) {
-                          setNewUser({ ...newUser, roles: [...newUser.roles, role.value as any] });
+                          setNewUser({ ...newUser, roles: [...newUser.roles, role.value] });
                         } else {
                           setNewUser({ ...newUser, roles: newUser.roles.filter(r => r !== role.value) });
                         }
@@ -439,6 +459,7 @@ const UsersPage = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Edit User Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -467,21 +488,14 @@ const UsersPage = () => {
             <div className="space-y-2">
               <Label>Roles</Label>
               <div className="space-y-2">
-                {[
-                  { value: 'admin', label: 'Admin' },
-                  { value: 'secretary', label: 'Secretary' },
-                  { value: 'trainer', label: 'Trainer' },
-                  { value: 'finance', label: 'Finance' },
-                  { value: 'it', label: 'IT' },
-                  { value: 'student', label: 'Student' },
-                ].map((role) => (
+                {availableRoles.map((role) => (
                   <div key={role.value} className="flex items-center space-x-2">
                     <Checkbox
                       id={`edit-${role.value}`}
-                      checked={editUser.roles.includes(role.value as any)}
+                      checked={editUser.roles.includes(role.value)}
                       onCheckedChange={(checked) => {
                         if (checked) {
-                          setEditUser({ ...editUser, roles: [...editUser.roles, role.value as any] });
+                          setEditUser({ ...editUser, roles: [...editUser.roles, role.value] });
                         } else {
                           setEditUser({ ...editUser, roles: editUser.roles.filter(r => r !== role.value) });
                         }
@@ -501,33 +515,37 @@ const UsersPage = () => {
             </Button>
             <Button 
               onClick={() => editUserMutation.mutate(editUser)}
-              disabled={!editUser.email || !editUser.fullName || editUser.roles.length === 0 || editUserMutation.isPending}
+              disabled={!editUser.email || !editUser.fullName || editUserMutation.isPending}
             >
-              {editUserMutation.isPending ? 'Updating...' : 'Update User'}
+              {editUserMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Salary Dialog */}
       <Dialog open={isSalaryDialogOpen} onOpenChange={setIsSalaryDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manage Salary for {selectedUser?.full_name}</DialogTitle>
+            <DialogTitle>Manage Salary - {selectedUser?.full_name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="amount">Salary Amount (RWF)</Label>
               <Input
                 id="amount"
                 type="number"
                 value={salaryData.amount}
-                onChange={(e) => setSalaryData(prev => ({ ...prev, amount: e.target.value }))}
-                placeholder="Enter salary amount"
+                onChange={(e) => setSalaryData({ ...salaryData, amount: e.target.value })}
+                placeholder="Enter amount"
               />
             </div>
-            <div>
-              <Label htmlFor="period">Payment Period</Label>
-              <Select value={salaryData.period} onValueChange={(value: any) => setSalaryData(prev => ({ ...prev, period: value }))}>
+            <div className="space-y-2">
+              <Label>Payment Period</Label>
+              <Select
+                value={salaryData.payment_period}
+                onValueChange={(value) => setSalaryData({ ...salaryData, payment_period: value })}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -535,47 +553,21 @@ const UsersPage = () => {
                   <SelectItem value="daily">Daily</SelectItem>
                   <SelectItem value="weekly">Weekly</SelectItem>
                   <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="custom">Custom Days</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {salaryData.period === 'custom' && (
-              <div>
-                <Label htmlFor="custom_days">Custom Days</Label>
-                <Input
-                  id="custom_days"
-                  type="number"
-                  value={salaryData.custom_days}
-                  onChange={(e) => setSalaryData(prev => ({ ...prev, custom_days: e.target.value }))}
-                  placeholder="Enter number of days"
-                />
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSalaryDialogOpen(false)}>
               Cancel
             </Button>
             <Button 
-              onClick={() => {
-                const amount = parseFloat(salaryData.amount);
-                const customDays = salaryData.period === 'custom' ? parseInt(salaryData.custom_days) : undefined;
-                if (isNaN(amount) || amount <= 0) {
-                  toast({ title: 'Invalid amount', variant: 'destructive' });
-                  return;
-                }
-                if (salaryData.period === 'custom' && (!customDays || customDays <= 0)) {
-                  toast({ title: 'Invalid custom days', variant: 'destructive' });
-                  return;
-                }
-                setSalaryMutation.mutate({
-                  userId: selectedUser.user_id,
-                  amount,
-                  period: salaryData.period,
-                  customDays,
-                });
-              }}
-              disabled={setSalaryMutation.isPending}
+              onClick={() => setSalaryMutation.mutate({
+                userId: selectedUser?.user_id,
+                amount: parseFloat(salaryData.amount) || 0,
+                paymentPeriod: salaryData.payment_period,
+              })}
+              disabled={!salaryData.amount || setSalaryMutation.isPending}
             >
               {setSalaryMutation.isPending ? 'Saving...' : 'Save Salary'}
             </Button>
