@@ -36,6 +36,7 @@ import RequestAdvancePage from './dashboard/RequestAdvancePage';
 import RecordVisitorPage from './dashboard/RecordVisitorPage';
 import VisitorsPage from './dashboard/VisitorsPage';
 import ITPage from './dashboard/ITPage';
+import SalaryAdvancesPage from './dashboard/SalaryAdvancesPage';
 
 // Role-specific home components
 const AdminDashboard = ({ stats, isLoading }: any) => {
@@ -444,6 +445,7 @@ const Dashboard = () => {
         <Route path="/materials" element={<MaterialsPage />} />
         <Route path="/leave-requests" element={<LeaveRequestsPage />} />
         <Route path="/request-advance" element={<RequestAdvancePage />} />
+        <Route path="/salary-advances" element={<SalaryAdvancesPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/activity-logs" element={<ActivityLogsPage />} />
         <Route path="/certificate-templates" element={<CertificateTemplatesPage />} />

@@ -763,6 +763,9 @@ export type Database = {
           amount: number
           created_at: string
           employee_id: string
+          forwarded_at: string | null
+          forwarded_by: string | null
+          forwarded_to_admin: boolean | null
           id: string
           reason: string
           review_comment: string | null
@@ -774,6 +777,9 @@ export type Database = {
           amount: number
           created_at?: string
           employee_id: string
+          forwarded_at?: string | null
+          forwarded_by?: string | null
+          forwarded_to_admin?: boolean | null
           id?: string
           reason: string
           review_comment?: string | null
@@ -785,6 +791,9 @@ export type Database = {
           amount?: number
           created_at?: string
           employee_id?: string
+          forwarded_at?: string | null
+          forwarded_by?: string | null
+          forwarded_to_admin?: boolean | null
           id?: string
           reason?: string
           review_comment?: string | null
