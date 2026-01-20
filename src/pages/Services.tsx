@@ -1,6 +1,6 @@
-﻿import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
-  Network,
   Users,
   Star,
   CheckCircle2,
@@ -10,52 +10,71 @@ import {
   ArrowRight,
   Zap,
   Target,
+  Code,
+  Network,
+  Shield,
+  Smartphone,
+  BarChart3,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+
+interface Service {
+  id: string;
+  title: string;
+  description: string;
+  icon: string | null;
+  features: string[] | null;
+  price: string | null;
+  color: string | null;
+  is_active: boolean | null;
+}
+
+const iconMap: Record<string, React.ElementType> = {
+  BookOpen,
+  Users,
+  TrendingUp,
+  Award,
+  Code,
+  Network,
+  Shield,
+  Smartphone,
+  BarChart3,
+  Globe,
+  Star,
+  Target,
+  Zap,
+};
 
 const Services = () => {
   const navigate = useNavigate();
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const services = [
-    {
-      id: 1,
-      title: "Professional Training",
-      description: "Comprehensive programs in web development, networking, cybersecurity, and digital skills.",
-      icon: BookOpen,
-      features: ["Industry curriculum", "Hands-on training", "Certification", "Job placement"],
-      color: "from-blue-500 to-blue-600",
-      price: "Contact us"
-    },
-    {
-      id: 2,
-      title: "Internship Programs",
-      description: "Structured opportunities providing real-world experience with leading tech companies.",
-      icon: Users,
-      features: ["3-6 months", "Industry partners", "Mentorship", "Evaluation"],
-      color: "from-purple-500 to-purple-600",
-      price: "From RWF 50k"
-    },
-    {
-      id: 3,
-      title: "Corporate Training",
-      description: "Custom solutions for companies looking to upskill their ICT and digital teams.",
-      icon: TrendingUp,
-      features: ["Custom curriculum", "On-site options", "Progress tracking", "Support"],
-      color: "from-green-500 to-green-600",
-      price: "Custom"
-    },
-    {
-      id: 4,
-      title: "Consultation",
-      description: "Expert guidance for digital transformation and technology adoption strategies.",
-      icon: Award,
-      features: ["Digital planning", "Tech assessment", "Implementation", "Support"],
-      color: "from-orange-500 to-orange-600",
-      price: "From RWF 100k"
-    }
-  ];
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("services")
+          .select("*")
+          .eq("is_active", true)
+          .order("display_order", { ascending: true });
+
+        if (error) throw error;
+        setServices(data || []);
+      } catch (error) {
+        console.error("Error fetching services:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchServices();
+  }, []);
 
   const specialOffers = [
     {
@@ -89,6 +108,11 @@ const Services = () => {
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  };
+
+  const getIcon = (iconName: string | null) => {
+    if (!iconName) return BookOpen;
+    return iconMap[iconName] || BookOpen;
   };
 
   return (
@@ -137,50 +161,65 @@ const Services = () => {
             </p>
           </motion.div>
 
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-8"
-          >
-            {services.map((service) => {
-              const Icon = service.icon;
-              return (
-                <motion.div key={service.id} variants={itemVariants}>
-                  <div className="professional-card h-full overflow-hidden group hover-lift">
-                    <div className={`h-1 bg-gradient-to-r ${service.color}`} />
-                    <div className="p-8 space-y-6">
-                      <div className="flex items-start justify-between">
-                        <div className={`w-14 h-14 rounded-lg bg-gradient-to-br ${service.color} flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-300`}>
-                          <Icon className="w-7 h-7" />
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : services.length > 0 ? (
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-8"
+            >
+              {services.map((service) => {
+                const Icon = getIcon(service.icon);
+                const colorClass = service.color || "from-blue-500 to-blue-600";
+                return (
+                  <motion.div key={service.id} variants={itemVariants}>
+                    <div className="professional-card h-full overflow-hidden group hover-lift">
+                      <div className={`h-1 bg-gradient-to-r ${colorClass}`} />
+                      <div className="p-8 space-y-6">
+                        <div className="flex items-start justify-between">
+                          <div className={`w-14 h-14 rounded-lg bg-gradient-to-br ${colorClass} flex items-center justify-center text-white group-hover:scale-110 transition-transform duration-300`}>
+                            <Icon className="w-7 h-7" />
+                          </div>
+                          {service.price && (
+                            <Badge className="bg-muted text-foreground border-border">
+                              {service.price}
+                            </Badge>
+                          )}
                         </div>
-                        <Badge className="bg-muted text-foreground border-border">
-                          {service.price}
-                        </Badge>
+                        <div>
+                          <h3 className="text-2xl font-semibold text-foreground mb-3">
+                            {service.title}
+                          </h3>
+                          <p className="text-muted-foreground text-base mb-6">
+                            {service.description}
+                          </p>
+                        </div>
+                        {service.features && service.features.length > 0 && (
+                          <ul className="space-y-3 border-t border-border pt-6">
+                            {service.features.map((feature, idx) => (
+                              <li key={idx} className="flex items-center gap-3 text-sm font-medium text-foreground">
+                                <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
+                                {feature}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
-                      <div>
-                        <h3 className="text-2xl font-semibold text-foreground mb-3">
-                          {service.title}
-                        </h3>
-                        <p className="text-muted-foreground text-base mb-6">
-                          {service.description}
-                        </p>
-                      </div>
-                      <ul className="space-y-3 border-t border-border pt-6">
-                        {service.features.map((feature, idx) => (
-                          <li key={idx} className="flex items-center gap-3 text-sm font-medium text-foreground">
-                            <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" />
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
                     </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </motion.div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          ) : (
+            <div className="text-center py-16">
+              <p className="text-muted-foreground">No services available at the moment.</p>
+            </div>
+          )}
         </div>
       </section>
 

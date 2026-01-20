@@ -374,6 +374,62 @@ export type Database = {
         }
         Relationships: []
       }
+      job_applications: {
+        Row: {
+          cover_letter: string | null
+          created_at: string
+          documents: string[] | null
+          email: string
+          full_name: string
+          id: string
+          phone: string | null
+          resume_url: string | null
+          review_notes: string | null
+          reviewed_by: string | null
+          status: string | null
+          updated_at: string
+          vacancy_id: string
+        }
+        Insert: {
+          cover_letter?: string | null
+          created_at?: string
+          documents?: string[] | null
+          email: string
+          full_name: string
+          id?: string
+          phone?: string | null
+          resume_url?: string | null
+          review_notes?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          updated_at?: string
+          vacancy_id: string
+        }
+        Update: {
+          cover_letter?: string | null
+          created_at?: string
+          documents?: string[] | null
+          email?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+          resume_url?: string | null
+          review_notes?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          updated_at?: string
+          vacancy_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_applications_vacancy_id_fkey"
+            columns: ["vacancy_id"]
+            isOneToOne: false
+            referencedRelation: "vacancies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       learning_materials: {
         Row: {
           class_id: string
