@@ -1,4 +1,5 @@
-﻿import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   Camera,
   Users,
@@ -6,60 +7,68 @@ import {
   Code,
   Network,
   ArrowRight,
-  Zap,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
+
+interface GalleryImage {
+  id: string;
+  title: string;
+  description: string | null;
+  image_url: string;
+  category: string | null;
+  tags: string[] | null;
+  is_active: boolean | null;
+}
 
 const Gallery = () => {
   const navigate = useNavigate();
+  const [images, setImages] = useState<GalleryImage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("gallery_images")
+          .select("*")
+          .eq("is_active", true)
+          .order("display_order", { ascending: true });
+
+        if (error) throw error;
+        setImages(data || []);
+      } catch (error) {
+        console.error("Error fetching gallery images:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchImages();
+  }, []);
 
   const categories = [
-    {
-      id: "training",
-      title: "Training Sessions",
-      description: "Interactive classroom and hands-on training",
-      icon: GraduationCap,
-      color: "from-blue-500 to-blue-600",
-    },
-    {
-      id: "students",
-      title: "Student Activities",
-      description: "Collaborative learning and teamwork",
-      icon: Users,
-      color: "from-green-500 to-green-600",
-    },
-    {
-      id: "projects",
-      title: "Projects",
-      description: "Completed student portfolio work",
-      icon: Code,
-      color: "from-purple-500 to-purple-600",
-    },
-    {
-      id: "facilities",
-      title: "Facilities",
-      description: "Modern labs and equipment",
-      icon: Network,
-      color: "from-orange-500 to-orange-600",
-    }
+    { id: "all", title: "All", icon: Camera },
+    { id: "training", title: "Training Sessions", icon: GraduationCap },
+    { id: "students", title: "Student Activities", icon: Users },
+    { id: "projects", title: "Projects", icon: Code },
+    { id: "facilities", title: "Facilities", icon: Network },
+    { id: "events", title: "Events", icon: Camera },
   ];
 
-  const images = [
-    { id: 1, category: "training", src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 2, category: "students", src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 3, category: "projects", src: "https://images.unsplash.com/photo-1552664730-d307ca884978?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 4, category: "facilities", src: "https://images.unsplash.com/photo-1516321497487-e288fb19713f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 5, category: "training", src: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 6, category: "students", src: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 7, category: "projects", src: "https://images.unsplash.com/photo-1551650975-87deedd944c3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 8, category: "facilities", src: "https://images.unsplash.com/photo-1509062522246-3755977927d7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 9, category: "training", src: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 10, category: "students", src: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 11, category: "projects", src: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" },
-    { id: 12, category: "facilities", src: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80" }
-  ];
+  const filteredImages = selectedCategory === "all" 
+    ? images 
+    : images.filter(img => img.category === selectedCategory);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -101,23 +110,21 @@ const Gallery = () => {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            className="flex flex-wrap justify-center gap-4"
           >
             {categories.map((cat) => {
               const Icon = cat.icon;
+              const isActive = selectedCategory === cat.id;
               return (
                 <motion.div key={cat.id} variants={itemVariants}>
-                  <div className="professional-card p-6 text-center h-full hover-lift group">
-                    <div className={`w-16 h-16 rounded-lg bg-gradient-to-br ${cat.color} flex items-center justify-center text-white mx-auto mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                      <Icon className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-foreground mb-2">
-                      {cat.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {cat.description}
-                    </p>
-                  </div>
+                  <Button
+                    variant={isActive ? "default" : "outline"}
+                    className={`flex items-center gap-2 ${isActive ? 'btn-primary' : ''}`}
+                    onClick={() => setSelectedCategory(cat.id)}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {cat.title}
+                  </Button>
                 </motion.div>
               );
             })}
@@ -142,34 +149,50 @@ const Gallery = () => {
             </p>
           </motion.div>
 
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-          >
-            {images.map((image, idx) => (
-              <motion.div key={image.id} variants={itemVariants}>
-                <div className="group cursor-pointer h-64 overflow-hidden rounded-lg shadow-subtle hover:shadow-elevated transition-all duration-300">
-                  <div className="relative w-full h-full">
-                    <img
-                      src={image.src}
-                      alt={`Gallery ${image.id}`}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
-                      <div className="text-white text-sm font-medium flex items-center gap-2">
-                        <Camera className="w-4 h-4" />
-                        View
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <LoadingSpinner size="lg" />
+            </div>
+          ) : filteredImages.length > 0 ? (
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+            >
+              {filteredImages.map((image) => (
+                <motion.div key={image.id} variants={itemVariants}>
+                  <div 
+                    className="group cursor-pointer h-64 overflow-hidden rounded-lg shadow-subtle hover:shadow-elevated transition-all duration-300"
+                    onClick={() => setSelectedImage(image)}
+                  >
+                    <div className="relative w-full h-full">
+                      <img
+                        src={image.image_url}
+                        alt={image.title}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                        <h3 className="text-white font-semibold text-sm mb-1">{image.title}</h3>
+                        {image.category && (
+                          <Badge className="w-fit bg-white/20 text-white border-white/30 text-xs">
+                            {image.category}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </motion.div>
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : (
+            <div className="text-center py-16">
+              <Camera className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-muted-foreground">No images available in this category.</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -248,6 +271,34 @@ const Gallery = () => {
           </motion.div>
         </div>
       </section>
+
+      {/* ================= IMAGE DIALOG ================= */}
+      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+          {selectedImage && (
+            <div>
+              <img
+                src={selectedImage.image_url}
+                alt={selectedImage.title}
+                className="w-full h-auto max-h-[70vh] object-contain"
+              />
+              <div className="p-6">
+                <h3 className="text-xl font-bold text-foreground mb-2">{selectedImage.title}</h3>
+                {selectedImage.description && (
+                  <p className="text-muted-foreground mb-4">{selectedImage.description}</p>
+                )}
+                {selectedImage.tags && selectedImage.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedImage.tags.map((tag, idx) => (
+                      <Badge key={idx} variant="secondary">{tag}</Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
