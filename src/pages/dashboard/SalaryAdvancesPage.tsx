@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,22 +6,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from '@/components/ui/dialog';
-import {
-  Tabs, TabsContent, TabsList, TabsTrigger,
-} from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import {
-  CheckCircle, XCircle, Send, Clock, AlertCircle, DollarSign, Users,
-} from 'lucide-react';
+import { CheckCircle, XCircle, Send, Clock, AlertCircle, DollarSign, Users } from 'lucide-react';
 
 interface SalaryAdvance {
   id: string;
@@ -41,7 +33,7 @@ interface SalaryAdvance {
 }
 
 const SalaryAdvancesPage = () => {
-  const { roles } = useAuth();
+  const { user, roles } = useAuth();
   const queryClient = useQueryClient();
   const [selectedRequest, setSelectedRequest] = useState<SalaryAdvance | null>(null);
   const [reviewComment, setReviewComment] = useState('');
@@ -50,6 +42,35 @@ const SalaryAdvancesPage = () => {
 
   const isAdmin = roles.includes('admin');
   const isFinance = roles.includes('finance');
+
+  // Ensure logged-in user exists in profiles
+  useEffect(() => {
+    const syncProfile = async () => {
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!data) {
+        const { error } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: user.id,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            email: user.email,
+            full_name: user.user_metadata?.full_name || user.email,
+          });
+        if (error) console.error('Failed to insert profile', error);
+      }
+    };
+
+    syncProfile();
+  }, [user]);
 
   // Fetch salary advance requests with employee details
   const { data: advances, isLoading } = useQuery({
@@ -62,8 +83,8 @@ const SalaryAdvancesPage = () => {
 
       if (error) throw error;
 
-      // Fetch employee profiles
       const employeeIds = [...new Set(data?.map(a => a.employee_id) || [])];
+
       const { data: profiles } = await supabase
         .from('profiles')
         .select('user_id, full_name, email')
@@ -83,15 +104,14 @@ const SalaryAdvancesPage = () => {
   // Forward to admin mutation (for finance)
   const forwardMutation = useMutation({
     mutationFn: async ({ id, comment }: { id: string; comment: string }) => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error('Not authenticated');
+      if (!user) throw new Error('Not authenticated');
 
       const { error } = await supabase
         .from('salary_advances')
         .update({
           forwarded_to_admin: true,
           forwarded_at: new Date().toISOString(),
-          forwarded_by: user.user.id,
+          forwarded_by: user.id,
           review_comment: comment || null,
         })
         .eq('id', id);
@@ -111,15 +131,14 @@ const SalaryAdvancesPage = () => {
   // Approve/Reject mutation (for admin)
   const reviewMutation = useMutation({
     mutationFn: async ({ id, status, comment }: { id: string; status: 'approved' | 'rejected'; comment: string }) => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error('Not authenticated');
+      if (!user) throw new Error('Not authenticated');
 
       const { error } = await supabase
         .from('salary_advances')
         .update({
           status,
           review_comment: comment || null,
-          reviewed_by: user.user.id,
+          reviewed_by: user.id,
         })
         .eq('id', id);
 
@@ -172,24 +191,16 @@ const SalaryAdvancesPage = () => {
   };
 
   const getStatusBadge = (advance: SalaryAdvance) => {
-    if (advance.status === 'approved') {
-      return <Badge className="bg-green-500">Approved</Badge>;
-    }
-    if (advance.status === 'rejected') {
-      return <Badge variant="destructive">Rejected</Badge>;
-    }
-    if (advance.forwarded_to_admin) {
-      return <Badge className="bg-blue-500">Pending Admin Approval</Badge>;
-    }
+    if (advance.status === 'approved') return <Badge className="bg-green-500">Approved</Badge>;
+    if (advance.status === 'rejected') return <Badge variant="destructive">Rejected</Badge>;
+    if (advance.forwarded_to_admin) return <Badge className="bg-blue-500">Pending Admin Approval</Badge>;
     return <Badge variant="secondary">Pending Review</Badge>;
   };
 
-  // Filter advances based on role and tab
   const pendingForFinance = advances?.filter(a => a.status === 'pending' && !a.forwarded_to_admin) || [];
   const forwardedToAdmin = advances?.filter(a => a.status === 'pending' && a.forwarded_to_admin) || [];
   const processed = advances?.filter(a => a.status !== 'pending') || [];
 
-  // Stats
   const stats = {
     total: advances?.length || 0,
     pendingReview: pendingForFinance.length,
@@ -199,13 +210,7 @@ const SalaryAdvancesPage = () => {
     totalAmount: advances?.filter(a => a.status === 'approved').reduce((sum, a) => sum + a.amount, 0) || 0,
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex items-center justify-center h-64"><LoadingSpinner size="lg" /></div>;
 
   const renderRequestsTable = (requests: SalaryAdvance[], showActions: boolean, actionType: 'finance' | 'admin') => (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -227,67 +232,46 @@ const SalaryAdvancesPage = () => {
                 No requests found
               </TableCell>
             </TableRow>
-          ) : (
-            requests.map((request) => (
-              <TableRow key={request.id}>
-                <TableCell>
-                  <div>
-                    <p className="font-medium">{request.employee_name}</p>
-                    <p className="text-sm text-muted-foreground">{request.employee_email}</p>
+          ) : requests.map(request => (
+            <TableRow key={request.id}>
+              <TableCell>
+                <div>
+                  <p className="font-medium">{request.employee_name}</p>
+                  <p className="text-sm text-muted-foreground">{request.employee_email}</p>
+                </div>
+              </TableCell>
+              <TableCell className="font-medium">{formatCurrency(request.amount)}</TableCell>
+              <TableCell className="max-w-xs truncate">{request.reason}</TableCell>
+              <TableCell>{getStatusBadge(request)}</TableCell>
+              <TableCell>{format(new Date(request.created_at), 'MMM d, yyyy')}</TableCell>
+              {showActions && (
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    {actionType === 'finance' && (
+                      <>
+                        <Button size="sm" onClick={() => openActionDialog(request, 'forward')}>
+                          <Send className="w-4 h-4 mr-1" /> Forward to Admin
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(request, 'reject')}>
+                          <XCircle className="w-4 h-4 mr-1" /> Reject
+                        </Button>
+                      </>
+                    )}
+                    {actionType === 'admin' && (
+                      <>
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => openActionDialog(request, 'approve')}>
+                          <CheckCircle className="w-4 h-4 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(request, 'reject')}>
+                          <XCircle className="w-4 h-4 mr-1" /> Reject
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </TableCell>
-                <TableCell className="font-medium">{formatCurrency(request.amount)}</TableCell>
-                <TableCell className="max-w-xs truncate">{request.reason}</TableCell>
-                <TableCell>{getStatusBadge(request)}</TableCell>
-                <TableCell>{format(new Date(request.created_at), 'MMM d, yyyy')}</TableCell>
-                {showActions && (
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {actionType === 'finance' && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => openActionDialog(request, 'forward')}
-                          >
-                            <Send className="w-4 h-4 mr-1" />
-                            Forward to Admin
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => openActionDialog(request, 'reject')}
-                          >
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Reject
-                          </Button>
-                        </>
-                      )}
-                      {actionType === 'admin' && (
-                        <>
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => openActionDialog(request, 'approve')}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => openActionDialog(request, 'reject')}
-                          >
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Reject
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                )}
-              </TableRow>
-            ))
-          )}
+              )}
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>
@@ -295,7 +279,6 @@ const SalaryAdvancesPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-display font-bold">Salary Advance Requests</h1>
         <p className="text-muted-foreground">
@@ -303,8 +286,9 @@ const SalaryAdvancesPage = () => {
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Pending Review */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
@@ -315,6 +299,7 @@ const SalaryAdvancesPage = () => {
             <p className="text-xs text-muted-foreground">Awaiting finance review</p>
           </CardContent>
         </Card>
+        {/* Pending Approval */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
@@ -325,6 +310,7 @@ const SalaryAdvancesPage = () => {
             <p className="text-xs text-muted-foreground">Forwarded to admin</p>
           </CardContent>
         </Card>
+        {/* Approved */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Approved</CardTitle>
@@ -335,6 +321,7 @@ const SalaryAdvancesPage = () => {
             <p className="text-xs text-muted-foreground">This period</p>
           </CardContent>
         </Card>
+        {/* Total Approved Amount */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Approved Amount</CardTitle>
@@ -347,68 +334,32 @@ const SalaryAdvancesPage = () => {
         </Card>
       </div>
 
-      {/* Tabs for different request states */}
-      <Tabs defaultValue={isAdmin ? "pending-approval" : "pending-review"}>
+      {/* Tabs */}
+      <Tabs defaultValue={isAdmin ? 'pending-approval' : 'pending-review'}>
         <TabsList>
           {isFinance && (
             <TabsTrigger value="pending-review" className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Pending Review ({pendingForFinance.length})
+              <Clock className="w-4 h-4" /> Pending Review ({pendingForFinance.length})
             </TabsTrigger>
           )}
           <TabsTrigger value="pending-approval" className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            Pending Admin Approval ({forwardedToAdmin.length})
+            <AlertCircle className="w-4 h-4" /> Pending Admin Approval ({forwardedToAdmin.length})
           </TabsTrigger>
           <TabsTrigger value="processed" className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Processed ({processed.length})
+            <Users className="w-4 h-4" /> Processed ({processed.length})
           </TabsTrigger>
         </TabsList>
 
         {isFinance && (
           <TabsContent value="pending-review" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Requests Awaiting Finance Review</CardTitle>
-                <CardDescription>
-                  Review these requests and forward eligible ones to admin for final approval
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {renderRequestsTable(pendingForFinance, true, 'finance')}
-              </CardContent>
-            </Card>
+            {renderRequestsTable(pendingForFinance, true, 'finance')}
           </TabsContent>
         )}
-
         <TabsContent value="pending-approval" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Requests Pending Admin Approval</CardTitle>
-              <CardDescription>
-                {isAdmin 
-                  ? 'These requests have been reviewed by finance and await your approval'
-                  : 'These requests have been forwarded and are awaiting admin decision'
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderRequestsTable(forwardedToAdmin, isAdmin, 'admin')}
-            </CardContent>
-          </Card>
+          {renderRequestsTable(forwardedToAdmin, isAdmin, 'admin')}
         </TabsContent>
-
         <TabsContent value="processed" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Processed Requests</CardTitle>
-              <CardDescription>History of approved and rejected requests</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {renderRequestsTable(processed, false, 'admin')}
-            </CardContent>
-          </Card>
+          {renderRequestsTable(processed, false, 'admin')}
         </TabsContent>
       </Tabs>
 
@@ -417,9 +368,8 @@ const SalaryAdvancesPage = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {currentAction === 'forward' && 'Forward Request to Admin'}
-              {currentAction === 'approve' && 'Approve Request'}
-              {currentAction === 'reject' && 'Reject Request'}
+              {currentAction === 'forward' ? 'Forward Request to Admin' :
+               currentAction === 'approve' ? 'Approve Request' : 'Reject Request'}
             </DialogTitle>
             <DialogDescription>
               {selectedRequest && (
@@ -440,33 +390,22 @@ const SalaryAdvancesPage = () => {
                 id="comment"
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder={
-                  currentAction === 'forward'
-                    ? 'Add any notes for the admin...'
-                    : 'Add a comment about your decision...'
-                }
+                placeholder={currentAction === 'forward' ? 'Add notes for admin...' : 'Add review comment...'}
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
             <Button
               onClick={handleAction}
               disabled={forwardMutation.isPending || reviewMutation.isPending}
-              className={
-                currentAction === 'approve' ? 'bg-green-600 hover:bg-green-700' :
-                currentAction === 'reject' ? 'bg-destructive hover:bg-destructive/90' :
-                ''
-              }
+              className={currentAction === 'approve' ? 'bg-green-600 hover:bg-green-700' :
+                         currentAction === 'reject' ? 'bg-destructive hover:bg-destructive/90' : ''}
             >
-              {(forwardMutation.isPending || reviewMutation.isPending) ? 'Processing...' : 
-                currentAction === 'forward' ? 'Forward to Admin' :
-                currentAction === 'approve' ? 'Approve Request' :
-                'Reject Request'
-              }
+              {(forwardMutation.isPending || reviewMutation.isPending) ? 'Processing...' :
+               currentAction === 'forward' ? 'Forward to Admin' :
+               currentAction === 'approve' ? 'Approve Request' : 'Reject Request'}
             </Button>
           </DialogFooter>
         </DialogContent>
