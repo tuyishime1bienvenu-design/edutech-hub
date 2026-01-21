@@ -16,43 +16,23 @@ import {
   MapPin, 
   DollarSign, 
   Calendar, 
-  Clock, 
-  Users, 
   Building, 
-  Mail, 
-  Phone, 
-  FileText, 
-  CheckCircle, 
   AlertCircle,
   Send,
-  Upload,
   ArrowLeft,
   Share2
 } from 'lucide-react';
+import type { Tables } from '@/integrations/supabase/types';
 
-interface Vacancy {
-  id: string;
-  title: string;
-  description: string;
-  requirements?: string;
-  responsibilities?: string;
-  department?: string;
-  position_type: 'full-time' | 'part-time' | 'contract' | 'internship';
-  salary_range?: string;
-  location?: string;
-  application_deadline?: string;
-  is_active: boolean;
-  created_at: string;
-}
+type Vacancy = Tables<'vacancies'>;
 
-interface JobApplication {
+interface ApplicationForm {
   vacancy_id: string;
-  applicant_name: string;
-  applicant_email: string;
-  applicant_phone?: string;
-  applicant_address?: string;
-  resume_url?: string;
-  cover_letter?: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  resume_url: string;
+  cover_letter: string;
 }
 
 const DirectApplyPage = () => {
@@ -65,12 +45,11 @@ const DirectApplyPage = () => {
   const [applicationDialogOpen, setApplicationDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const [applicationForm, setApplicationForm] = useState<JobApplication>({
+  const [applicationForm, setApplicationForm] = useState<ApplicationForm>({
     vacancy_id: vacancyId || '',
-    applicant_name: '',
-    applicant_email: '',
-    applicant_phone: '',
-    applicant_address: '',
+    full_name: '',
+    email: '',
+    phone: '',
     resume_url: '',
     cover_letter: '',
   });
@@ -114,14 +93,16 @@ const DirectApplyPage = () => {
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('job_applications')
         .insert([{
-          ...applicationForm,
           vacancy_id: vacancy.id,
-        }])
-        .select()
-        .single();
+          full_name: applicationForm.full_name,
+          email: applicationForm.email,
+          phone: applicationForm.phone || null,
+          resume_url: applicationForm.resume_url || null,
+          cover_letter: applicationForm.cover_letter || null,
+        }]);
 
       if (error) throw error;
 
@@ -130,13 +111,11 @@ const DirectApplyPage = () => {
         description: 'Your application has been received. We will contact you soon.',
       });
 
-      // Reset form
       setApplicationForm({
         vacancy_id: vacancy.id,
-        applicant_name: '',
-        applicant_email: '',
-        applicant_phone: '',
-        applicant_address: '',
+        full_name: '',
+        email: '',
+        phone: '',
         resume_url: '',
         cover_letter: '',
       });
@@ -163,7 +142,7 @@ const DirectApplyPage = () => {
     });
   };
 
-  const getPositionTypeColor = (type: string) => {
+  const getPositionTypeColor = (type: string | null) => {
     switch (type) {
       case 'full-time': return 'bg-green-500';
       case 'part-time': return 'bg-blue-500';
@@ -173,12 +152,20 @@ const DirectApplyPage = () => {
     }
   };
 
-  const isDeadlineNear = (deadline?: string) => {
+  const isDeadlineNear = (deadline: string | null) => {
     if (!deadline) return false;
     const deadlineDate = new Date(deadline);
     const today = new Date();
     const daysUntilDeadline = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return daysUntilDeadline <= 7 && daysUntilDeadline > 0;
+  };
+
+  const formatSalaryRange = (min: number | null, max: number | null) => {
+    if (!min && !max) return null;
+    if (min && max) return `RWF ${min.toLocaleString()} - ${max.toLocaleString()}`;
+    if (min) return `From RWF ${min.toLocaleString()}`;
+    if (max) return `Up to RWF ${max.toLocaleString()}`;
+    return null;
   };
 
   if (loading) {
@@ -210,7 +197,6 @@ const DirectApplyPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
@@ -237,7 +223,6 @@ const DirectApplyPage = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -252,8 +237,8 @@ const DirectApplyPage = () => {
                     {vacancy.title}
                   </CardTitle>
                   <div className="flex flex-wrap gap-2 mb-4">
-                    <Badge className={getPositionTypeColor(vacancy.position_type)}>
-                      {vacancy.position_type.replace('-', ' ')}
+                    <Badge className={getPositionTypeColor(vacancy.type)}>
+                      {(vacancy.type || 'full-time').replace('-', ' ')}
                     </Badge>
                     {vacancy.department && (
                       <Badge variant="outline">{vacancy.department}</Badge>
@@ -268,26 +253,34 @@ const DirectApplyPage = () => {
                 <p className="text-gray-600 whitespace-pre-wrap">{vacancy.description}</p>
               </div>
 
-              {vacancy.responsibilities && (
+              {vacancy.responsibilities && vacancy.responsibilities.length > 0 && (
                 <div className="prose max-w-none">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Responsibilities</h3>
-                  <p className="text-gray-600 whitespace-pre-wrap">{vacancy.responsibilities}</p>
+                  <ul className="list-disc list-inside text-gray-600">
+                    {vacancy.responsibilities.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
-              {vacancy.requirements && (
+              {vacancy.requirements && vacancy.requirements.length > 0 && (
                 <div className="prose max-w-none">
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">Requirements</h3>
-                  <p className="text-gray-600 whitespace-pre-wrap">{vacancy.requirements}</p>
+                  <ul className="list-disc list-inside text-gray-600">
+                    {vacancy.requirements.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t">
-                {vacancy.salary_range && (
+                {formatSalaryRange(vacancy.salary_min, vacancy.salary_max) && (
                   <div className="flex items-center text-gray-600">
                     <DollarSign className="w-5 h-5 mr-2" />
                     <span className="font-medium">Salary:</span>
-                    <span className="ml-2">{vacancy.salary_range}</span>
+                    <span className="ml-2">{formatSalaryRange(vacancy.salary_min, vacancy.salary_max)}</span>
                   </div>
                 )}
                 {vacancy.location && (
@@ -297,16 +290,16 @@ const DirectApplyPage = () => {
                     <span className="ml-2">{vacancy.location}</span>
                   </div>
                 )}
-                {vacancy.application_deadline && (
+                {vacancy.deadline && (
                   <div className={`flex items-center ${
-                    isDeadlineNear(vacancy.application_deadline) ? 'text-red-600' : 'text-gray-600'
+                    isDeadlineNear(vacancy.deadline) ? 'text-red-600' : 'text-gray-600'
                   }`}>
                     <Calendar className="w-5 h-5 mr-2" />
                     <span className="font-medium">Deadline:</span>
                     <span className="ml-2">
-                      {format(new Date(vacancy.application_deadline), 'MMM d, yyyy')}
+                      {format(new Date(vacancy.deadline), 'MMM d, yyyy')}
                     </span>
-                    {isDeadlineNear(vacancy.application_deadline) && (
+                    {isDeadlineNear(vacancy.deadline) && (
                       <AlertCircle className="w-5 h-5 ml-2" />
                     )}
                   </div>
@@ -337,7 +330,6 @@ const DirectApplyPage = () => {
         </motion.div>
       </main>
 
-      {/* Application Dialog */}
       <Dialog open={applicationDialogOpen} onOpenChange={setApplicationDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -348,42 +340,33 @@ const DirectApplyPage = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="applicant-name">Full Name *</Label>
+                <Label htmlFor="full-name">Full Name *</Label>
                 <Input
-                  id="applicant-name"
-                  value={applicationForm.applicant_name}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, applicant_name: e.target.value })}
+                  id="full-name"
+                  value={applicationForm.full_name}
+                  onChange={(e) => setApplicationForm({ ...applicationForm, full_name: e.target.value })}
                   placeholder="Enter your full name"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="applicant-email">Email Address *</Label>
+                <Label htmlFor="email">Email Address *</Label>
                 <Input
-                  id="applicant-email"
+                  id="email"
                   type="email"
-                  value={applicationForm.applicant_email}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, applicant_email: e.target.value })}
+                  value={applicationForm.email}
+                  onChange={(e) => setApplicationForm({ ...applicationForm, email: e.target.value })}
                   placeholder="Enter your email"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="applicant-phone">Phone Number</Label>
+                <Label htmlFor="phone">Phone Number</Label>
                 <Input
-                  id="applicant-phone"
-                  value={applicationForm.applicant_phone}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, applicant_phone: e.target.value })}
+                  id="phone"
+                  value={applicationForm.phone}
+                  onChange={(e) => setApplicationForm({ ...applicationForm, phone: e.target.value })}
                   placeholder="Enter your phone number"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="applicant-address">Address</Label>
-                <Input
-                  id="applicant-address"
-                  value={applicationForm.applicant_address}
-                  onChange={(e) => setApplicationForm({ ...applicationForm, applicant_address: e.target.value })}
-                  placeholder="Enter your address"
                 />
               </div>
             </div>
