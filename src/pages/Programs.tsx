@@ -45,6 +45,7 @@ const Programs = () => {
           .order("created_at", { ascending: false });
 
         if (error) throw error;
+        console.log("Fetched programs:", programsData);
         setPrograms(programsData || []);
       } catch (error) {
         console.error("Error fetching programs:", error);
@@ -57,7 +58,14 @@ const Programs = () => {
   }, []);
 
   const isProgramOpen = (program: Program) => {
-    return program.is_active === true;
+    if (!program.is_active) return false;
+    
+    const now = new Date();
+    const endDate = new Date(program.end_date);
+    const startDate = new Date(program.start_date);
+    
+    // Program is open if current date is between start and end date (inclusive)
+    return now >= startDate && now <= endDate;
   };
 
   const openPrograms = programs.filter(isProgramOpen);
@@ -72,6 +80,22 @@ const Programs = () => {
 
   const filteredOpenPrograms = filteredPrograms.filter(isProgramOpen);
   const filteredClosedPrograms = filteredPrograms.filter(program => !isProgramOpen(program));
+
+  const getProgramStatus = (program: Program) => {
+    if (!program.is_active) return { status: 'Closed', color: 'gray', reason: 'Program inactive' };
+    
+    const now = new Date();
+    const endDate = new Date(program.end_date);
+    const startDate = new Date(program.start_date);
+    
+    if (now < startDate) {
+      return { status: 'Coming Soon', color: 'blue', reason: 'Starts ' + startDate.toLocaleDateString() };
+    } else if (now > endDate) {
+      return { status: 'Expired', color: 'red', reason: 'Ended ' + endDate.toLocaleDateString() };
+    } else {
+      return { status: 'Open', color: 'green', reason: 'Closes ' + endDate.toLocaleDateString() };
+    }
+  };
 
   const getProgramImage = (programName: string) => {
     const name = programName.toLowerCase();
@@ -325,7 +349,10 @@ const Programs = () => {
                               <div className="text-center text-white">
                                 <Calendar className="h-8 w-8 mx-auto mb-2" />
                                 <div className="text-sm font-medium">
-                                  {program.is_active ? "Coming Soon" : "Closed"}
+                                  {getProgramStatus(program).status}
+                                </div>
+                                <div className="text-xs opacity-75 mt-1">
+                                  {getProgramStatus(program).reason}
                                 </div>
                               </div>
                             </div>
@@ -350,7 +377,9 @@ const Programs = () => {
                               </div>
                             </div>
                             <Button variant="outline" className="w-full mt-4" disabled>
-                              Registration Closed
+                              {getProgramStatus(program).status === 'Expired' ? 'Program Ended' : 
+                               getProgramStatus(program).status === 'Coming Soon' ? 'Not Yet Available' : 
+                               'Registration Closed'}
                             </Button>
                           </div>
                         </div>

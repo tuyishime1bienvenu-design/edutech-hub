@@ -34,9 +34,26 @@ const NoticesPage = () => {
     notice_type: 'announcement',
     is_holiday: false,
     holiday_date: '',
+    is_public: false,
+    class_id: 'all',
   });
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const canManage = ['admin', 'it', 'secretary'].includes(primaryRole || '');
+
+  const { data: classes } = useQuery({
+    queryKey: ['classes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: canManage,
+  });
 
   const { data: notices, isLoading } = useQuery({
     queryKey: ['notices'],
@@ -51,7 +68,15 @@ const NoticesPage = () => {
   });
 
   const resetForm = () => {
-    setFormData({ title: '', content: '', notice_type: 'announcement', is_holiday: false, holiday_date: '' });
+    setFormData({ 
+      title: '', 
+      content: '', 
+      notice_type: 'announcement', 
+      is_holiday: false, 
+      holiday_date: '',
+      is_public: false,
+      class_id: 'all'
+    });
     setEditingNotice(null);
   };
 
@@ -63,6 +88,8 @@ const NoticesPage = () => {
       notice_type: notice.notice_type || 'announcement',
       is_holiday: notice.is_holiday || false,
       holiday_date: notice.holiday_date || '',
+      is_public: notice.is_public || false,
+      class_id: notice.class_id || 'all',
     });
     setIsDialogOpen(true);
   };
@@ -72,6 +99,7 @@ const NoticesPage = () => {
       const payload = {
         ...data,
         holiday_date: data.is_holiday ? data.holiday_date : null,
+        class_id: data.class_id === 'all' ? null : data.class_id,
       };
       if (editingNotice) {
         const { error } = await supabase.from('notices').update(payload).eq('id', editingNotice.id);
@@ -134,7 +162,7 @@ const NoticesPage = () => {
           <h1 className="text-2xl font-display font-bold">Notices</h1>
           <p className="text-muted-foreground">View and manage announcements</p>
         </div>
-        {primaryRole === 'admin' && (
+        {canManage && (
           <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             Post Notice
@@ -176,7 +204,7 @@ const NoticesPage = () => {
                         </div>
                       </div>
                     </div>
-                    {primaryRole === 'admin' && (
+                    {canManage && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
@@ -254,6 +282,35 @@ const NoticesPage = () => {
                 rows={4}
               />
             </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="is_public">Public Notice (Visible on Home Page)</Label>
+              <Switch
+                id="is_public"
+                checked={formData.is_public}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_public: checked })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Target Class (Optional)</Label>
+              <Select
+                value={formData.class_id}
+                onValueChange={(value) => setFormData({ ...formData, class_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes / General</SelectItem>
+                  {classes?.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex items-center justify-between">
               <Label htmlFor="is_holiday">Is this a holiday notice?</Label>
               <Switch

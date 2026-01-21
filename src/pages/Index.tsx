@@ -34,6 +34,8 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Program = Database["public"]["Tables"]["programs"]["Row"];
 
+import { FloatingNoticeBoard } from "@/components/announcements/FloatingNoticeBoard";
+
 const Index = () => {
   const navigate = useNavigate();
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -125,6 +127,7 @@ const Index = () => {
     <div className="min-h-screen">
       {/* ================= HERO SECTION ================= */}
       <section className="relative min-h-[90vh] flex items-center gradient-hero overflow-hidden">
+        <FloatingNoticeBoard />
         {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-10 w-72 h-72 bg-secondary rounded-full blur-3xl" />

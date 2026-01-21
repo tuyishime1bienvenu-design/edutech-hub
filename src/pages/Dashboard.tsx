@@ -3,6 +3,8 @@ import { Users, GraduationCap, CreditCard, ClipboardList, TrendingUp, Award, Ale
 import { useAuth } from '@/contexts/AuthContext';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { useSalary } from '@/hooks/useSalary';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { WelcomeCard } from '@/components/dashboard/WelcomeCard';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -11,6 +13,9 @@ import { RecentActivityCard } from '@/components/dashboard/RecentActivityCard';
 import { AttendanceChart } from '@/components/dashboard/AttendanceChart';
 import { RoleInsights } from '@/components/dashboard/RoleInsights';
 import { motion } from 'framer-motion';
+import ProfileEdit from '@/components/profile/ProfileEdit';
+import ProfileView from '@/components/profile/ProfileView';
+import TrainerSalaryDetails from '@/pages/dashboard/TrainerSalaryDetails';
 
 // Import all dashboard pages
 import StudentsPage from './dashboard/StudentsPage';
@@ -18,7 +23,7 @@ import UsersPage from './dashboard/UsersPage';
 import ClassesPage from './dashboard/ClassesPage';
 import ProgramsPage from './dashboard/ProgramsPage';
 import AttendancePage from './dashboard/AttendancePage';
-import FinancesPage from './dashboard/FinancesPage';
+import FinanceDashboardPage from './dashboard/FinanceDashboardPage';
 import NoticesPage from './dashboard/NoticesPage';
 import MaterialsPage from './dashboard/MaterialsPage';
 import LeaveRequestsPage from './dashboard/LeaveRequestsPage';
@@ -36,7 +41,19 @@ import RequestAdvancePage from './dashboard/RequestAdvancePage';
 import RecordVisitorPage from './dashboard/RecordVisitorPage';
 import VisitorsPage from './dashboard/VisitorsPage';
 import ITPage from './dashboard/ITPage';
+import ITDashboardPage from './dashboard/ITDashboardPage';
+import ITManagementPage from './dashboard/ITManagementPage';
+import WiFiNetworksPage from './dashboard/WiFiNetworksPage';
+import MaterialTransactionsPage from './dashboard/MaterialTransactionsPage';
+import MaterialsInventoryPage from './dashboard/MaterialsInventoryPage';
+import EquipmentPage from './dashboard/EquipmentPage';
+import SettingsPage from './dashboard/SettingsPage';
 import SalaryAdvancesPage from './dashboard/SalaryAdvancesPage';
+import TrainerSalaryPage from './dashboard/TrainerSalaryPage';
+import JobPostingsPage from './dashboard/JobPostingsPage';
+import JobApplicationsPage from './dashboard/JobApplicationsPage';
+import DocumentsPage from './dashboard/DocumentsPage';
+import Careers from './Careers';
 
 // Role-specific home components
 const AdminDashboard = ({ stats, isLoading }: any) => {
@@ -73,10 +90,10 @@ const AdminDashboard = ({ stats, isLoading }: any) => {
           delay={0.1}
         />
         <StatCard
-          title="Total Users"
-          value={isLoading ? '...' : String(stats?.totalUsers || 0)}
-          icon={Users}
-          variant="secondary"
+          title="Active Programs"
+          value={isLoading ? '...' : String(stats?.activePrograms || 0)}
+          icon={BookOpen}
+          variant="info"
           delay={0.2}
         />
         <StatCard
@@ -158,52 +175,165 @@ const TrainerDashboard = ({ stats, isLoading }: any) => {
   };
 
   return (
-    <div className="space-y-6">
-      <WelcomeCard />
+    <div className="space-y-8">
+      {/* Header Section with Welcome */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl"
+      >
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Welcome back, Trainer!</h1>
+            <p className="text-blue-100 text-lg">Here's your teaching dashboard overview</p>
+          </div>
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+            className="bg-white/20 backdrop-blur-sm rounded-xl p-4 text-center"
+          >
+            <p className="text-sm text-blue-100 mb-1">Current Period</p>
+            <p className="text-2xl font-bold">{new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+          </motion.div>
+        </div>
+      </motion.div>
 
-      {/* Role-specific insights */}
-      <RoleInsights />
-
-      {/* Trainer Stats - Focus on classes and attendance */}
+      {/* Stats Grid with Enhanced Design */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        transition={{ delay: 0.2, duration: 0.5 }}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
       >
-        <StatCard
-          title="My Classes"
-          value={isLoading ? '...' : String(stats?.activeClasses || 0)}
-          icon={GraduationCap}
-          variant="primary"
-          delay={0}
-        />
-        <StatCard
-          title="Students in Class"
-          value={isLoading ? '...' : String(stats?.totalStudents || 0)}
-          icon={Users}
-          delay={0.1}
-        />
-        <StatCard
-          title="Attendance Rate"
-          value={isLoading ? '...' : `${stats?.attendanceRate || 0}%`}
-          icon={ClipboardList}
-          variant="success"
-          delay={0.2}
-        />
-        <StatCard
-          title="My Salary"
-          value={salaryLoading ? '...' : salary ? formatSalary(salary.amount) : 'Not set'}
-          icon={CreditCard}
-          variant="info"
-          delay={0.3}
-        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.3, duration: 0.3 }}
+          whileHover={{ scale: 1.05, y: -5 }}
+          className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <GraduationCap className="w-8 h-8 text-blue-100" />
+            <span className="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full text-xs">Active</span>
+          </div>
+          <h3 className="text-blue-100 text-sm font-medium mb-1">My Classes</h3>
+          <p className="text-3xl font-bold">{isLoading ? '...' : String(stats?.activeClasses || 0)}</p>
+          <div className="mt-4 pt-4 border-t border-blue-400/30">
+            <div className="flex items-center text-blue-100 text-sm">
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+              All running smoothly
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4, duration: 0.3 }}
+          whileHover={{ scale: 1.05, y: -5 }}
+          className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <Users className="w-8 h-8 text-purple-100" />
+            <span className="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full text-xs">Total</span>
+          </div>
+          <h3 className="text-purple-100 text-sm font-medium mb-1">Students in Class</h3>
+          <p className="text-3xl font-bold">{isLoading ? '...' : String(stats?.totalStudents || 0)}</p>
+          <div className="mt-4 pt-4 border-t border-purple-400/30">
+            <div className="flex items-center text-purple-100 text-sm">
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+              Engaged learners
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.5, duration: 0.3 }}
+          whileHover={{ scale: 1.05, y: -5 }}
+          className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <ClipboardList className="w-8 h-8 text-green-100" />
+            <span className="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full text-xs">Rate</span>
+          </div>
+          <h3 className="text-green-100 text-sm font-medium mb-1">Attendance Rate</h3>
+          <p className="text-3xl font-bold">{isLoading ? '...' : `${stats?.attendanceRate || 0}%`}</p>
+          <div className="mt-4 pt-4 border-t border-green-400/30">
+            <div className="flex items-center text-green-100 text-sm">
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+              Excellent performance
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.6, duration: 0.3 }}
+          whileHover={{ scale: 1.05, y: -5 }}
+          className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <CreditCard className="w-8 h-8 text-orange-100" />
+            <span className="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full text-xs">Monthly</span>
+          </div>
+          <h3 className="text-orange-100 text-sm font-medium mb-1">My Salary</h3>
+          <p className="text-3xl font-bold">{salaryLoading ? '...' : salary ? formatSalary(salary.amount) : 'Not set'}</p>
+          <div className="mt-4 pt-4 border-t border-orange-400/30">
+            <div className="flex items-center text-orange-100 text-sm">
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
+              On time payment
+            </div>
+          </div>
+        </motion.div>
       </motion.div>
 
-      <QuickActions role="trainer" />
+      {/* Quick Actions Section */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7, duration: 0.5 }}
+      >
+        <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+          <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
+            <div className="w-1 h-6 bg-blue-500 rounded-full mr-3"></div>
+            Quick Actions
+          </h2>
+          <QuickActions role="trainer" />
+        </div>
+      </motion.div>
 
+      {/* Charts and Activity Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AttendanceChart />
-        <RecentActivityCard />
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.8, duration: 0.5 }}
+          className="bg-white rounded-xl shadow-lg p-6 border border-gray-100"
+        >
+          <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
+            <div className="w-1 h-6 bg-green-500 rounded-full mr-3"></div>
+            Attendance Overview
+          </h2>
+          <AttendanceChart />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.9, duration: 0.5 }}
+          className="bg-white rounded-xl shadow-lg p-6 border border-gray-100"
+        >
+          <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
+            <div className="w-1 h-6 bg-purple-500 rounded-full mr-3"></div>
+            Recent Activity
+          </h2>
+          <RecentActivityCard />
+        </motion.div>
       </div>
     </div>
   );
@@ -439,13 +569,14 @@ const Dashboard = () => {
         <Route path="/classes" element={<ClassesPage />} />
         <Route path="/programs" element={<ProgramsPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
-        <Route path="/finances" element={<FinancesPage />} />
+        <Route path="/finance" element={<FinanceDashboardPage />} />
         <Route path="/fee-structures" element={<FeeStructuresPage />} />
         <Route path="/notices" element={<NoticesPage />} />
         <Route path="/materials" element={<MaterialsPage />} />
         <Route path="/leave-requests" element={<LeaveRequestsPage />} />
         <Route path="/request-advance" element={<RequestAdvancePage />} />
         <Route path="/salary-advances" element={<SalaryAdvancesPage />} />
+        <Route path="/trainer-salary" element={<TrainerSalaryPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/activity-logs" element={<ActivityLogsPage />} />
         <Route path="/certificate-templates" element={<CertificateTemplatesPage />} />
@@ -453,10 +584,23 @@ const Dashboard = () => {
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/vacancies" element={<VacanciesPage />} />
         <Route path="/gallery" element={<GalleryPage />} />
+        <Route path="/job-postings" element={<JobPostingsPage />} />
+        <Route path="/job-applications" element={<JobApplicationsPage />} />
+        <Route path="/documents" element={<DocumentsPage />} />
+        <Route path="/careers" element={<Careers />} />
         <Route path="/contact-messages" element={<ContactMessagesPage />} />
         <Route path="/record-visitor" element={<RecordVisitorPage />} />
         <Route path="/visitors" element={<VisitorsPage />} />
-        <Route path="/it" element={<ITPage />} />
+        <Route path="/it" element={<ITManagementPage />} />
+        <Route path="/it-dashboard" element={<ITDashboardPage />} />
+        <Route path="/wifi-networks" element={<WiFiNetworksPage />} />
+        <Route path="/material-transactions" element={<MaterialTransactionsPage />} />
+        <Route path="/materials-inventory" element={<MaterialsInventoryPage />} />
+        <Route path="/equipment" element={<EquipmentPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/trainer-salary-details" element={<TrainerSalaryDetails />} />
+        <Route path="/profile" element={<ProfileEdit />} />
+        <Route path="/profiles" element={<ProfileView />} />
       </Routes>
     </DashboardLayout>
   );

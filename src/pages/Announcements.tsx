@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ArrowRight,
   Eye,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useAuth } from "@/contexts/AuthContext";
+import { CreateAnnouncementDialog } from "@/components/announcements/CreateAnnouncementDialog";
 
 interface Notice {
   id: string;
@@ -39,34 +42,43 @@ interface Notice {
   holiday_date: string | null;
   is_active: boolean | null;
   created_at: string;
+  is_public?: boolean;
+  class_id?: string | null;
 }
 
 const Announcements = () => {
   const navigate = useNavigate();
+  const { roles } = useAuth();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  const canCreate = roles.some((role) =>
+    ["admin", "secretary", "finance", "it", "trainer"].includes(role)
+  );
+
+  const fetchNotices = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("notices")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setNotices(data || []);
+    } catch (error) {
+      console.error("Error fetching notices:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchNotices = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("notices")
-          .select("*")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-        setNotices(data || []);
-      } catch (error) {
-        console.error("Error fetching notices:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchNotices();
   }, []);
 
@@ -112,14 +124,26 @@ const Announcements = () => {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="text-center max-w-3xl mx-auto space-y-6"
+            className="flex flex-col md:flex-row justify-between items-center gap-6"
           >
-            <h1 className="text-5xl md:text-6xl font-bold leading-tight">
-              Latest Updates & News
-            </h1>
-            <p className="text-xl text-white/90">
-              Stay informed about our programs, events, achievements, and important announcements
-            </p>
+            <div className="text-center md:text-left space-y-4 max-w-2xl">
+              <h1 className="text-4xl md:text-6xl font-bold leading-tight">
+                Latest Updates & News
+              </h1>
+              <p className="text-lg md:text-xl text-white/90">
+                Stay informed about our programs, events, achievements, and
+                important announcements
+              </p>
+            </div>
+            {canCreate && (
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                className="bg-white text-primary hover:bg-white/90 font-semibold px-6 py-6 h-auto text-lg shadow-lg hover:shadow-xl transition-all"
+              >
+                <Plus className="mr-2 h-6 w-6" />
+                Create Announcement
+              </Button>
+            )}
           </motion.div>
         </div>
       </section>
@@ -303,6 +327,11 @@ const Announcements = () => {
                 <Badge className={getCategoryColor(selectedNotice.notice_type).bg + ' ' + getCategoryColor(selectedNotice.notice_type).text}>
                   {selectedNotice.notice_type || 'Announcement'}
                 </Badge>
+                {selectedNotice.is_public && (
+                  <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50">
+                    Public
+                  </Badge>
+                )}
               </div>
               <div className="prose prose-sm max-w-none">
                 <p className="text-foreground whitespace-pre-wrap">{selectedNotice.content}</p>
@@ -318,6 +347,12 @@ const Announcements = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <CreateAnnouncementDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={fetchNotices}
+      />
     </div>
   );
 };

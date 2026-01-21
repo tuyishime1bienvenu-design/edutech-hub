@@ -5,7 +5,7 @@ export const useDashboardStats = () => {
   return useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const [studentsRes, classesRes, attendanceRes, paymentsRes] = await Promise.all([
+      const [studentsRes, classesRes, attendanceRes, paymentsRes, programsRes] = await Promise.all([
         supabase.from('students').select('id', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('classes').select('id', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('attendance')
@@ -15,10 +15,13 @@ export const useDashboardStats = () => {
           .select('amount')
           .eq('status', 'paid')
           .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+        supabase.from('programs').select('id', { count: 'exact', head: true }).eq('is_active', true),
       ]);
 
       const totalStudents = studentsRes.count || 0;
       const activeClasses = classesRes.count || 0;
+      const activePrograms = programsRes.count || 0;
+      const totalUsers = totalStudents;
       
       const attendanceData = attendanceRes.data || [];
       const presentCount = attendanceData.filter(a => a.is_present).length;
@@ -32,6 +35,8 @@ export const useDashboardStats = () => {
       return {
         totalStudents,
         activeClasses,
+        activePrograms,
+        totalUsers,
         attendanceRate,
         totalPayments,
       };

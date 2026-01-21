@@ -12,9 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const Contact = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -38,21 +42,57 @@ const Contact = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsSubmitting(false);
-    setIsSubmitted(true);
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setFormData({
-        firstName: "",
-        lastName: "",
-        email: "",
-        phone: "",
-        subject: "",
-        message: "",
-        inquiryType: "general"
+
+    try {
+      // Send message to database
+      const { data, error } = await supabase
+        .from('contact_messages')
+        .insert({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          subject: formData.subject,
+          message: formData.message,
+          inquiry_type: formData.inquiryType,
+          status: 'unread',
+          created_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('Error sending message:', error);
+        toast({
+          title: "Error",
+          description: "Failed to send message. Please try again.",
+          variant: "destructive"
+        });
+        throw error;
+      }
+
+      console.log('Message sent successfully:', data);
+      toast({
+        title: "Message Sent!",
+        description: "We'll get back to you as soon as possible.",
       });
-    }, 3000);
+      
+      setIsSubmitted(true);
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setFormData({
+          firstName: "",
+          lastName: "",
+          email: "",
+          phone: "",
+          subject: "",
+          message: "",
+          inquiryType: "general"
+        });
+      }, 3000);
+    } catch (error) {
+      console.error('Submit error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const contactInfo = [
@@ -324,7 +364,7 @@ const Contact = () => {
                     >
                       {isSubmitting ? (
                         <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                          <LoadingSpinner size="sm" className="mr-2" />
                           Sending...
                         </>
                       ) : (

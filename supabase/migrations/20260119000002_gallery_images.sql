@@ -1,5 +1,5 @@
 -- Create gallery_images table for image gallery management
-CREATE TABLE public.gallery_images (
+CREATE TABLE IF NOT EXISTS public.gallery_images (
     id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
@@ -18,14 +18,16 @@ CREATE TABLE public.gallery_images (
 ALTER TABLE public.gallery_images ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for gallery_images
+DROP POLICY IF EXISTS "Anyone can view active gallery images" ON public.gallery_images;
 CREATE POLICY "Anyone can view active gallery images" ON public.gallery_images
     FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "Admin can manage all gallery images" ON public.gallery_images;
 CREATE POLICY "Admin can manage all gallery images" ON public.gallery_images
     FOR ALL USING (public.has_role(auth.uid(), 'admin'));
 
 -- Create indexes for faster lookups
-CREATE INDEX idx_gallery_images_category ON public.gallery_images(category);
-CREATE INDEX idx_gallery_images_is_active ON public.gallery_images(is_active);
-CREATE INDEX idx_gallery_images_is_featured ON public.gallery_images(is_featured);
-CREATE INDEX idx_gallery_images_display_order ON public.gallery_images(display_order);
+CREATE INDEX IF NOT EXISTS idx_gallery_images_category ON public.gallery_images(category);
+CREATE INDEX IF NOT EXISTS idx_gallery_images_is_active ON public.gallery_images(is_active);
+CREATE INDEX IF NOT EXISTS idx_gallery_images_is_featured ON public.gallery_images(is_featured);
+CREATE INDEX IF NOT EXISTS idx_gallery_images_display_order ON public.gallery_images(display_order);

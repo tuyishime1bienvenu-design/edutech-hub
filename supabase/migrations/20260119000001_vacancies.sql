@@ -1,5 +1,5 @@
 -- Create vacancies table for job openings
-CREATE TABLE public.vacancies (
+CREATE TABLE IF NOT EXISTS public.vacancies (
     id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     department TEXT NOT NULL,
@@ -22,13 +22,15 @@ CREATE TABLE public.vacancies (
 ALTER TABLE public.vacancies ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for vacancies
+DROP POLICY IF EXISTS "Anyone can view active vacancies" ON public.vacancies;
 CREATE POLICY "Anyone can view active vacancies" ON public.vacancies
     FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "Admin can manage all vacancies" ON public.vacancies;
 CREATE POLICY "Admin can manage all vacancies" ON public.vacancies
     FOR ALL USING (public.has_role(auth.uid(), 'admin'));
 
 -- Create indexes for faster lookups
-CREATE INDEX idx_vacancies_is_active ON public.vacancies(is_active);
-CREATE INDEX idx_vacancies_department ON public.vacancies(department);
-CREATE INDEX idx_vacancies_created_at ON public.vacancies(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vacancies_is_active ON public.vacancies(is_active);
+CREATE INDEX IF NOT EXISTS idx_vacancies_department ON public.vacancies(department);
+CREATE INDEX IF NOT EXISTS idx_vacancies_created_at ON public.vacancies(created_at DESC);

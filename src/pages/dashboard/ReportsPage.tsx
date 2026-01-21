@@ -1,266 +1,553 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
-import { Download, Calendar, X as XIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { format, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { Badge } from '@/components/ui/badge';
+import {
+  BarChart3,
+  PieChart,
+  Users,
+  GraduationCap,
+  DollarSign,
+  CreditCard,
+  Download,
+  Filter,
+  CheckCircle,
+  Building,
+  MessageSquare,
+  UserPlus
+} from 'lucide-react';
+
+interface SystemStats {
+  totalStudents: number;
+  totalClasses: number;
+  totalPrograms: number;
+  totalPayments: number;
+  totalRevenue: number;
+  attendanceRate: number;
+  activeUsers: number;
+  totalMessages: number;
+  totalVisitors: number;
+  totalEquipment: number;
+  totalMaterials: number;
+}
 
 const ReportsPage = () => {
-  const [dateRange, setDateRange] = useState('30');
-  const { primaryRole, user } = useAuth();
-  const queryClient = useQueryClient();
-  const [reportClassId, setReportClassId] = useState('');
-  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0,10));
-  const [presentCount, setPresentCount] = useState<number | ''>('');
-  const [onlyMine, setOnlyMine] = useState<boolean>(false);
+  const { user, primaryRole } = useAuth();
   const { toast } = useToast();
-  const [topics, setTopics] = useState<string[]>([]);
-  const [newTopic, setNewTopic] = useState('');
+  
+  const [dateRange, setDateRange] = useState('month');
+  const [startDate, setStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [reportType, setReportType] = useState('overview');
 
-  useEffect(() => {
-    if (primaryRole === 'trainer') setOnlyMine(true);
-  }, [primaryRole]);
+  // Check if user can view reports (admin)
+  const canViewReports = primaryRole === 'admin';
 
-  const { data: reports, isLoading: isLoadingReports } = useQuery({
-    queryKey: ['reports-table', onlyMine, user?.id],
+  // Get date range based on selection
+  const getDateRange = () => {
+    const now = new Date();
+    switch (dateRange) {
+      case 'today':
+        return {
+          start: format(now, 'yyyy-MM-dd'),
+          end: format(now, 'yyyy-MM-dd')
+        };
+      case 'week':
+        return {
+          start: format(subDays(now, 7), 'yyyy-MM-dd'),
+          end: format(now, 'yyyy-MM-dd')
+        };
+      case 'month':
+        return {
+          start: format(startOfMonth(now), 'yyyy-MM-dd'),
+          end: format(endOfMonth(now), 'yyyy-MM-dd')
+        };
+      case 'quarter':
+        const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+        const quarterEnd = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0);
+        return {
+          start: format(quarterStart, 'yyyy-MM-dd'),
+          end: format(quarterEnd, 'yyyy-MM-dd')
+        };
+      case 'year':
+        return {
+          start: format(startOfYear(now), 'yyyy-MM-dd'),
+          end: format(endOfYear(now), 'yyyy-MM-dd')
+        };
+      default:
+        return { start: startDate, end: endDate };
+    }
+  };
+
+  const dateRangeValues = getDateRange();
+
+  // Fetch system statistics
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['system-stats', dateRangeValues.start, dateRangeValues.end],
     queryFn: async () => {
-      let q = supabase
-        .from('class_reports')
-        .select('id, date, topics_covered, notes, class_id, classes (name), trainer_id')
-        .order('date', { ascending: false })
-        .limit(200);
-      if (onlyMine && user?.id) q = q.eq('trainer_id', user.id);
-      const { data: reportsData, error } = await q;
-      if (error) throw error;
+      if (!canViewReports) return null;
 
-      const trainerIds = Array.from(new Set((reportsData || []).map((r: any) => r.trainer_id).filter(Boolean)));
-      let profilesMap: Record<string, string> = {};
-      if (trainerIds.length > 0) {
-        const { data: profiles, error: pErr } = await supabase
-          .from('profiles')
-          .select('user_id, full_name, email')
-          .in('user_id', trainerIds as any[]);
-        if (pErr) throw pErr;
-        (profiles || []).forEach((p: any) => {
-          const name = p.full_name || p.email || p.user_id;
-          profilesMap[p.user_id] = name;
-        });
-      }
+      // Fetch students
+      const { data: students } = await supabase
+        .from('students')
+        .select('id, is_active, level')
+        .eq('is_active', true);
 
-      return (reportsData || []).map((r: any) => ({
-        ...r,
-        trainer_name: r.trainer_id ? (profilesMap[r.trainer_id] || r.trainer_id) : '-',
+      // Fetch classes
+      const { data: classes } = await supabase
+        .from('classes')
+        .select('id, is_active')
+        .eq('is_active', true);
+
+      // Fetch programs
+      const { data: programs } = await supabase
+        .from('programs')
+        .select('id, is_active');
+
+      // Fetch payments
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('amount, status')
+        .gte('created_at', dateRangeValues.start)
+        .lte('created_at', dateRangeValues.end + ' 23:59:59');
+
+      // Fetch attendance
+      const { data: attendance } = await supabase
+        .from('attendance')
+        .select('is_present')
+        .gte('date', dateRangeValues.start)
+        .lte('date', dateRangeValues.end);
+
+      // Fetch users
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id');
+
+      // Fetch messages
+      const { data: messages } = await supabase
+        .from('contact_messages')
+        .select('id')
+        .gte('created_at', dateRangeValues.start)
+        .lte('created_at', dateRangeValues.end + ' 23:59:59');
+
+      // Calculate statistics
+      const totalStudents = students?.length || 0;
+      const totalClasses = classes?.length || 0;
+      const totalPrograms = programs?.length || 0;
+      const totalPayments = payments?.length || 0;
+      const totalRevenue = payments?.reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0) || 0;
+      const attendanceRecords = attendance?.length || 0;
+      const presentAttendance = attendance?.filter(a => a.is_present).length || 0;
+      const attendanceRate = attendanceRecords > 0 ? Math.round((presentAttendance / attendanceRecords) * 100) : 0;
+      const activeUsers = profiles?.length || 0;
+      const totalMessages = messages?.length || 0;
+      const totalVisitors = 0; // Simplified for now
+      const totalEquipment = 0; // Simplified for now
+      const totalMaterials = 0; // Simplified for now
+
+      return {
+        totalStudents,
+        totalClasses,
+        totalPrograms,
+        totalPayments,
+        totalRevenue,
+        attendanceRate,
+        activeUsers,
+        totalMessages,
+        totalVisitors,
+        totalEquipment,
+        totalMaterials
+      } as SystemStats;
+    },
+    enabled: canViewReports,
+  });
+
+  // Fetch student distribution by level
+  const { data: studentLevelData } = useQuery({
+    queryKey: ['student-level-distribution'],
+    queryFn: async () => {
+      if (!canViewReports) return [];
+
+      const { data: students } = await supabase
+        .from('students')
+        .select('level')
+        .eq('is_active', true);
+
+      const levelCounts = students?.reduce((acc, student) => {
+        acc[student.level] = (acc[student.level] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>) || {};
+
+      return Object.entries(levelCounts).map(([level, count]) => ({
+        name: level,
+        value: count,
+        color: level === 'L3' ? '#3b82f6' : level === 'L4' ? '#10b981' : '#8b5cf6'
       }));
     },
+    enabled: canViewReports,
   });
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  useEffect(() => setPage(1), [onlyMine, pageSize]);
-  const totalPages = Math.max(1, Math.ceil((reports?.length || 0) / pageSize));
-  const currentPageReports = useMemo(() => {
-    if (!reports) return [];
-    const start = (page - 1) * pageSize;
-    return reports.slice(start, start + pageSize);
-  }, [reports, page, pageSize]);
-
-  // Fetch trainer's classes from the classes table where trainer_id matches
-  const { data: trainerClasses } = useQuery({
-    queryKey: ['trainer-classes', user?.id],
+  // Fetch payment status distribution
+  const { data: paymentStatusData } = useQuery({
+    queryKey: ['payment-status-distribution', dateRangeValues.start, dateRangeValues.end],
     queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from('classes')
-        .select('id, name')
-        .eq('trainer_id', user.id)
-        .order('name');
-      if (error) throw error;
-      return data || [];
+      if (!canViewReports) return [];
+
+      const { data: payments } = await supabase
+        .from('payments')
+        .select('status')
+        .gte('created_at', dateRangeValues.start)
+        .lte('created_at', dateRangeValues.end + ' 23:59:59');
+
+      const statusCounts = payments?.reduce((acc, payment) => {
+        acc[payment.status] = (acc[payment.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>) || {};
+
+      return Object.entries(statusCounts).map(([status, count]) => ({
+        name: status.charAt(0).toUpperCase() + status.slice(1),
+        value: count,
+        color: status === 'paid' ? '#10b981' : status === 'pending' ? '#f59e0b' : '#8b5cf6'
+      }));
     },
-    enabled: !!user?.id && primaryRole === 'trainer',
+    enabled: canViewReports,
   });
 
-  const createReportMutation = useMutation({
-    mutationFn: async () => {
-      if (primaryRole !== 'trainer') throw new Error('Only trainers can create class reports');
-      if (!reportClassId) throw new Error('Select a class');
-      if (topics.length === 0) throw new Error('Add at least one topic');
-      if (presentCount === '' || presentCount === null) throw new Error('Enter present student count');
-      const notes = `Present: ${presentCount}`;
-
-      const { error } = await supabase.from('class_reports').insert({
-        class_id: reportClassId,
-        date: reportDate,
-        topics_covered: topics.join('\n'),
-        notes,
-        trainer_id: user?.id,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reports-table'] });
-      setReportClassId('');
-      setTopics([]);
-      setNewTopic('');
-      setPresentCount('');
-      setReportDate(new Date().toISOString().slice(0,10));
-      toast({ title: 'Report created' });
-    },
-    onError: (err: any) => {
-      toast({ title: 'Error', description: err.message || 'Failed to create report', variant: 'destructive' });
+  // Export reports
+  const exportReports = () => {
+    if (!stats) {
+      toast({ title: 'No data to export', variant: 'destructive' });
+      return;
     }
-  });
 
-  if (isLoadingReports) {
+    const csvContent = [
+      'Report Type,Total Value,Period',
+      `Students,${stats.totalStudents},${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Classes,${stats.totalClasses},${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Programs,${stats.totalPrograms},${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Payments,${stats.totalPayments},${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Revenue,RWF ${stats.totalRevenue.toLocaleString()},${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Attendance Rate,${stats.attendanceRate}%,${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Active Users,${stats.activeUsers},${dateRangeValues.start} to ${dateRangeValues.end}`,
+      `Messages,${stats.totalMessages},${dateRangeValues.start} to ${dateRangeValues.end}`
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `system-reports-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({ title: 'System reports exported successfully' });
+  };
+
+  if (!canViewReports) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
+      <div className="space-y-6">
+        <div className="text-center py-12">
+          <Filter className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+          <p className="text-muted-foreground">
+            You don't have permission to view system reports. Only admins can access reports.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {primaryRole === 'trainer' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Create Class Report</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div>
-                <Select value={reportClassId} onValueChange={(v) => setReportClassId(v)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {trainerClasses?.map((c: any) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
-              </div>
-              <div>
-                <Input type="number" placeholder="Present count" value={presentCount as any} onChange={(e) => setPresentCount(e.target.value === '' ? '' : parseInt(e.target.value))} />
-              </div>
-              <div>
-                <Button onClick={() => createReportMutation.mutate()} disabled={createReportMutation.isPending}>
-                  {createReportMutation.isPending ? 'Saving...' : 'Save Report'}
-                </Button>
-              </div>
-              <div className="md:col-span-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-                  <Input placeholder="Add topic" value={newTopic} onChange={(e) => setNewTopic(e.target.value)} />
-                  <div className="col-span-1 md:col-span-2 flex gap-2">
-                    <Button onClick={() => {
-                      const t = newTopic.trim();
-                      if (!t) return;
-                      setTopics(prev => [...prev, t]);
-                      setNewTopic('');
-                    }}>Add Topic</Button>
-                    <Button variant="outline" onClick={() => { setTopics([]); setNewTopic(''); }}>Clear</Button>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {topics.map((t, idx) => (
-                    <Badge key={idx} className="flex items-center gap-2">
-                      <span>{t}</span>
-                      <button onClick={() => setTopics(prev => prev.filter((_, i) => i !== idx))} className="opacity-60 hover:opacity-100">
-                        <XIcon className="w-4 h-4" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-display font-bold">Reports</h1>
-          <p className="text-muted-foreground">Recorded class reports</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <BarChart3 className="w-8 h-8 text-blue-600" />
+          <div>
+            <h1 className="text-3xl font-bold">System Reports</h1>
+            <p className="text-muted-foreground">
+              Comprehensive analytics and insights across all system areas
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={dateRange} onValueChange={setDateRange}>
-            <SelectTrigger className="w-[180px]">
-              <Calendar className="w-4 h-4 mr-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-              <SelectItem value="90">Last 90 days</SelectItem>
-              <SelectItem value="365">Last year</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
-          {primaryRole === 'trainer' && (
-            <label className="ml-4 inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
-              <span>Show only my reports</span>
-            </label>
-          )}
-        </div>
+        <Button onClick={exportReports} variant="outline">
+          <Download className="w-4 h-4 mr-2" />
+          Export Reports
+        </Button>
       </div>
 
+      {/* Date Range Filter */}
       <Card>
         <CardHeader>
-          <CardTitle>Reports Table</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            Report Period
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto">
-              <thead>
-                <tr className="text-left text-sm text-muted-foreground">
-                  <th className="px-2 py-2">Date</th>
-                  <th className="px-2 py-2">Class</th>
-                  <th className="px-2 py-2">Trainer</th>
-                  <th className="px-2 py-2">Topics</th>
-                  <th className="px-2 py-2">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentPageReports?.map((r: any) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="px-2 py-3">{new Date(r.date).toLocaleDateString()}</td>
-                    <td className="px-2 py-3">{r.classes?.name || r.class_id}</td>
-                    <td className="px-2 py-3">{r.trainer_name || r.trainer_id || '-'}</td>
-                    <td className="px-2 py-3 whitespace-pre-wrap">{r.topics_covered}</td>
-                    <td className="px-2 py-3">{r.notes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Date Range</Label>
+              <Select value={dateRange} onValueChange={setDateRange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                  <SelectItem value="quarter">This Quarter</SelectItem>
+                  <SelectItem value="year">This Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Custom Range</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Report Type</Label>
+              <Select value={reportType} onValueChange={setReportType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select report type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="overview">Overview</SelectItem>
+                  <SelectItem value="students">Students</SelectItem>
+                  <SelectItem value="academics">Academics</SelectItem>
+                  <SelectItem value="finance">Finance</SelectItem>
+                  <SelectItem value="operations">Operations</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">Page {page} of {totalPages} — {reports?.length || 0} reports</div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>Prev</Button>
-          <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Next</Button>
-          <select value={pageSize} onChange={(e) => setPageSize(parseInt(e.target.value))} className="ml-2 p-1 border rounded">
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-          </select>
+
+      {statsLoading ? (
+        <div className="text-center py-12">
+          <LoadingSpinner size="lg" />
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Overview Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <Users className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalStudents}</p>
+                    <p className="text-sm text-muted-foreground">Total Students</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <GraduationCap className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalClasses}</p>
+                    <p className="text-sm text-muted-foreground">Active Classes</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <DollarSign className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">RWF {stats.totalRevenue.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">Total Revenue</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-orange-100 rounded-lg">
+                    <CheckCircle className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.attendanceRate}%</p>
+                    <p className="text-sm text-muted-foreground">Attendance Rate</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Student Distribution Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="w-5 h-5" />
+                  Student Distribution by Level
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {studentLevelData?.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-sm font-medium">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="h-2 rounded-full" 
+                            style={{ 
+                              backgroundColor: item.color,
+                              width: `${stats.totalStudents > 0 ? (item.value / stats.totalStudents) * 100 : 0}%`
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium">{item.value}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment Status Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  Payment Status Distribution
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {paymentStatusData?.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-sm font-medium">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="h-2 rounded-full" 
+                            style={{ 
+                              backgroundColor: item.color,
+                              width: `${stats.totalPayments > 0 ? (item.value / stats.totalPayments) * 100 : 0}%`
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium">{item.value}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Additional Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-indigo-100 rounded-lg">
+                    <Building className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.activeUsers}</p>
+                    <p className="text-sm text-muted-foreground">Active Users</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-teal-100 rounded-lg">
+                    <MessageSquare className="w-6 h-6 text-teal-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalMessages}</p>
+                    <p className="text-sm text-muted-foreground">Messages</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-pink-100 rounded-lg">
+                    <UserPlus className="w-6 h-6 text-pink-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalPrograms}</p>
+                    <p className="text-sm text-muted-foreground">Programs</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-yellow-100 rounded-lg">
+                    <DollarSign className="w-6 h-6 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{stats.totalPayments}</p>
+                    <p className="text-sm text-muted-foreground">Total Payments</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 };

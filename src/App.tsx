@@ -17,6 +17,8 @@ import Register from "./pages/Register";
 import Vacancies from "./pages/Vacancies";
 import Announcements from "./pages/Announcements";
 import NotFound from "./pages/NotFound";
+import PublicVacanciesPage from "./pages/PublicVacanciesPage";
+import DirectApplyPage from "./pages/DirectApplyPage";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +77,14 @@ const App = () => (
                   <Vacancies />
                 </MainLayout>
               }
+            />
+            <Route
+              path="/careers"
+              element={<PublicVacanciesPage />}
+            />
+            <Route
+              path="/apply/:vacancyId"
+              element={<DirectApplyPage />}
             />
             <Route
               path="/announcements"

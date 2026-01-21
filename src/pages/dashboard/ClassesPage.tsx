@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Users, Clock, BookOpen, Eye, Edit, Trash2, X } from 'lucide-react';
+import { Plus, Users, Clock, BookOpen, Eye, Edit, Trash2, X, UserPlus, Book } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,12 +30,16 @@ interface ClassItem {
   is_active: boolean;
   program_id: string | null;
   programs?: { name: string } | null;
+  trainer_id: string | null;
+  trainer_name?: string | null;
 }
 
 const ClassesPage = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [isTrainerDialogOpen, setIsTrainerDialogOpen] = useState(false);
+  const [isCurriculumDialogOpen, setIsCurriculumDialogOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
   const [newClass, setNewClass] = useState({
     name: '',
@@ -43,6 +47,11 @@ const ClassesPage = () => {
     shift: 'morning' as 'morning' | 'afternoon',
     max_capacity: 30,
     program_id: '',
+  });
+  const [newCurriculum, setNewCurriculum] = useState({
+    topic: '',
+    description: '',
+    order_index: 0,
   });
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -55,7 +64,27 @@ const ClassesPage = () => {
         .select(`*, programs (name)`)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data as ClassItem[];
+      
+      // Get trainer information
+      const trainerIds = Array.from(new Set((data || []).map((c: any) => c.trainer_id).filter(Boolean)));
+      let profilesMap: Record<string, string> = {};
+      if (trainerIds.length > 0) {
+        const { data: profiles, error: pErr } = await supabase
+          .from('profiles')
+          .select('user_id, full_name, email')
+          .in('user_id', trainerIds as any[]);
+        if (!pErr && profiles) {
+          profiles.forEach((p: any) => {
+            const name = p.full_name || p.email || p.user_id;
+            profilesMap[p.user_id] = name;
+          });
+        }
+      }
+      
+      return (data || []).map((c: any) => ({ 
+        ...c, 
+        trainer_name: c.trainer_id ? (profilesMap[c.trainer_id] || c.trainer_id) : null 
+      })) as ClassItem[];
     },
   });
 
@@ -74,6 +103,47 @@ const ClassesPage = () => {
       if (error) throw error;
       return data;
     },
+  });
+
+  const { data: trainers } = useQuery({
+    queryKey: ['trainers-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'trainer');
+      if (error) throw error;
+      
+      const trainerIds = (data || []).map((ur: any) => ur.user_id);
+      if (trainerIds.length === 0) return [];
+      
+      const { data: profiles, error: pErr } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, email')
+        .in('user_id', trainerIds)
+        .eq('is_active', true);
+      if (pErr) throw pErr;
+      
+      return (profiles || []).map((p: any) => ({
+        id: p.user_id,
+        name: p.full_name || p.email || p.user_id
+      }));
+    },
+  });
+
+  const { data: curriculumItems = [], isLoading: curriculumLoading } = useQuery({
+    queryKey: ['class-curriculum', selectedClass?.id],
+    queryFn: async () => {
+      if (!selectedClass?.id) return [];
+      const { data, error } = await (supabase as any)
+        .from('class_curriculum')
+        .select('*')
+        .eq('class_id', selectedClass.id)
+        .order('order_index', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedClass?.id,
   });
 
   const addClassMutation = useMutation({
@@ -134,6 +204,60 @@ const ClassesPage = () => {
     },
   });
 
+  const assignTrainerMutation = useMutation({
+    mutationFn: async ({ classId, trainerId }: { classId: string; trainerId: string | null }) => {
+      const { error } = await supabase
+        .from('classes')
+        .update({ trainer_id: trainerId })
+        .eq('id', classId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['classes'] });
+      setIsTrainerDialogOpen(false);
+      toast({ title: 'Trainer assigned successfully' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error assigning trainer', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const addCurriculumMutation = useMutation({
+    mutationFn: async (curriculumData: typeof newCurriculum) => {
+      if (!selectedClass?.id) throw new Error('No class selected');
+      const { error } = await (supabase as any).from('class_curriculum').insert({
+        class_id: selectedClass.id,
+        topic: curriculumData.topic,
+        description: curriculumData.description || null,
+        order_index: curriculumData.order_index,
+        created_by: (await supabase.auth.getUser()).data.user?.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['class-curriculum'] });
+      setNewCurriculum({ topic: '', description: '', order_index: 0 });
+      toast({ title: 'Curriculum item added successfully' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error adding curriculum', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteCurriculumMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from('class_curriculum').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['class-curriculum'] });
+      toast({ title: 'Curriculum item deleted' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error deleting curriculum', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const handleSeeDetails = (classItem: ClassItem) => {
     setSelectedClass(classItem);
     setIsDetailsDialogOpen(true);
@@ -149,6 +273,16 @@ const ClassesPage = () => {
       program_id: classItem.program_id || '',
     });
     setIsEditDialogOpen(true);
+  };
+
+  const handleAssignTrainer = (classItem: ClassItem) => {
+    setSelectedClass(classItem);
+    setIsTrainerDialogOpen(true);
+  };
+
+  const handleManageCurriculum = (classItem: ClassItem) => {
+    setSelectedClass(classItem);
+    setIsCurriculumDialogOpen(true);
   };
 
   const getLevelColor = (level: string) => {
@@ -189,6 +323,7 @@ const ClassesPage = () => {
               <TableHead>Program</TableHead>
               <TableHead>Level</TableHead>
               <TableHead>Shift</TableHead>
+              <TableHead>Trainer</TableHead>
               <TableHead>Enrollment</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[120px]">Actions</TableHead>
@@ -197,7 +332,7 @@ const ClassesPage = () => {
           <TableBody>
             {paginatedData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No classes found. Create your first class.
                 </TableCell>
               </TableRow>
@@ -210,6 +345,11 @@ const ClassesPage = () => {
                     <Badge className={getLevelColor(classItem.level)}>{classItem.level}</Badge>
                   </TableCell>
                   <TableCell className="capitalize">{classItem.shift}</TableCell>
+                  <TableCell>
+                    <span className="text-sm">
+                      {classItem.trainer_name || 'No Trainer'}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     {classItem.current_enrollment || 0} / {classItem.max_capacity}
                   </TableCell>
@@ -274,12 +414,36 @@ const ClassesPage = () => {
                   <Label className="text-muted-foreground">Capacity</Label>
                   <p className="font-medium">{selectedClass.current_enrollment || 0} / {selectedClass.max_capacity}</p>
                 </div>
+                <div>
+                  <Label className="text-muted-foreground">Trainer</Label>
+                  <p className="font-medium">{selectedClass.trainer_name || 'No Trainer Assigned'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Status</Label>
+                  <Badge variant={selectedClass.is_active ? 'default' : 'secondary'}>
+                    {selectedClass.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button onClick={() => handleEdit(selectedClass)}>
                   <Edit className="w-4 h-4 mr-2" />
                   Edit Class
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleAssignTrainer(selectedClass)}
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Assign Trainer
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleManageCurriculum(selectedClass)}
+                >
+                  <Book className="w-4 h-4 mr-2" />
+                  Manage Curriculum
                 </Button>
                 <Button
                   variant="destructive"
@@ -472,6 +636,162 @@ const ClassesPage = () => {
               disabled={!newClass.name || updateClassMutation.isPending}
             >
               {updateClassMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Trainer Dialog */}
+      <Dialog open={isTrainerDialogOpen} onOpenChange={setIsTrainerDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Trainer - {selectedClass?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Select Trainer</Label>
+              <Select
+                value={selectedClass?.trainer_id || 'none'}
+                onValueChange={(value) => {
+                  if (selectedClass) {
+                    setSelectedClass({ ...selectedClass, trainer_id: value === 'none' ? null : value });
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Trainer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Trainer</SelectItem>
+                  {trainers?.map(trainer => (
+                    <SelectItem key={trainer.id} value={trainer.id}>{trainer.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedClass?.trainer_id && (
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Current trainer: <span className="font-medium">{selectedClass.trainer_name || 'Unknown'}</span>
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTrainerDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => selectedClass && assignTrainerMutation.mutate({ 
+                classId: selectedClass.id, 
+                trainerId: selectedClass.trainer_id 
+              })}
+              disabled={assignTrainerMutation.isPending}
+            >
+              {assignTrainerMutation.isPending ? 'Assigning...' : 'Assign Trainer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Curriculum Management Dialog */}
+      <Dialog open={isCurriculumDialogOpen} onOpenChange={setIsCurriculumDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Manage Curriculum - {selectedClass?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Add New Curriculum Item */}
+            <div className="space-y-4 p-4 bg-muted rounded-lg">
+              <h3 className="font-medium">Add New Curriculum Item</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="curriculum-topic">Topic</Label>
+                  <Input
+                    id="curriculum-topic"
+                    value={newCurriculum.topic}
+                    onChange={(e) => setNewCurriculum({ ...newCurriculum, topic: e.target.value })}
+                    placeholder="e.g., Introduction to React"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="curriculum-description">Description</Label>
+                  <Input
+                    id="curriculum-description"
+                    value={newCurriculum.description}
+                    onChange={(e) => setNewCurriculum({ ...newCurriculum, description: e.target.value })}
+                    placeholder="Brief description of the topic"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="curriculum-order">Order</Label>
+                  <Input
+                    id="curriculum-order"
+                    type="number"
+                    value={newCurriculum.order_index}
+                    onChange={(e) => setNewCurriculum({ ...newCurriculum, order_index: parseInt(e.target.value) || 0 })}
+                    placeholder="Order in curriculum"
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => addCurriculumMutation.mutate(newCurriculum)}
+                disabled={!newCurriculum.topic || addCurriculumMutation.isPending}
+              >
+                {addCurriculumMutation.isPending ? 'Adding...' : 'Add Curriculum Item'}
+              </Button>
+            </div>
+
+            {/* Existing Curriculum Items */}
+            <div className="space-y-4">
+              <h3 className="font-medium">Current Curriculum</h3>
+              {curriculumLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner size="sm" />
+                </div>
+              ) : curriculumItems.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                  <Book className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No curriculum items added yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {curriculumItems.map((item: any) => (
+                    <div key={item.id} className="flex items-center justify-between p-4 bg-card border rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium text-muted-foreground">#{item.order_index + 1}</span>
+                          <h4 className="font-medium">{item.topic}</h4>
+                          {item.is_completed && (
+                            <Badge variant="default" className="text-xs">Completed</Badge>
+                          )}
+                        </div>
+                        {item.description && (
+                          <p className="text-sm text-muted-foreground">{item.description}</p>
+                        )}
+                        {item.completed_date && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Completed: {new Date(item.completed_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteCurriculumMutation.mutate(item.id)}
+                        disabled={deleteCurriculumMutation.isPending}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCurriculumDialogOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

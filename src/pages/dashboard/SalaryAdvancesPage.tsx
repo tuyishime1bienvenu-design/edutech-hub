@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { CheckCircle, XCircle, Send, Clock, AlertCircle, DollarSign, Users } from 'lucide-react';
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertCircle,
+  DollarSign,
+  Users,
+  FileText,
+  Eye,
+  Edit,
+  Download,
+  Wallet,
+  Building,
+  Mail,
+  Phone,
+  User
+} from 'lucide-react';
 
 interface SalaryAdvance {
   id: string;
@@ -23,389 +40,641 @@ interface SalaryAdvance {
   status: 'pending' | 'approved' | 'rejected';
   review_comment: string | null;
   reviewed_by: string | null;
-  forwarded_to_admin: boolean;
-  forwarded_at: string | null;
-  forwarded_by: string | null;
   created_at: string;
   updated_at: string;
   employee_name?: string;
   employee_email?: string;
 }
 
+interface Trainer {
+  user_id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  role: string;
+  monthly_salary?: number;
+  classes?: Array<{
+    name: string;
+    level: string;
+  }>;
+}
+
+interface PayrollItem {
+  trainer_id: string;
+  trainer_name: string;
+  base_salary: number;
+  approved_advances: number;
+  net_salary: number;
+  email: string;
+  phone: string;
+  status: 'pending' | 'approved' | 'processed';
+}
+
 const SalaryAdvancesPage = () => {
-  const { user, roles } = useAuth();
+  const { user, primaryRole } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const [selectedRequest, setSelectedRequest] = useState<SalaryAdvance | null>(null);
   const [reviewComment, setReviewComment] = useState('');
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [currentAction, setCurrentAction] = useState<'forward' | 'approve' | 'reject' | null>(null);
+  const [currentAction, setCurrentAction] = useState<'approved' | 'rejected' | null>(null);
+  const [activeTab, setActiveTab] = useState('advances');
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [adjustedAmount, setAdjustedAmount] = useState('');
 
-  const isAdmin = roles.includes('admin');
-  const isFinance = roles.includes('finance');
+  // Check if user can manage salary (admin)
+  const canManageSalary = primaryRole === 'admin';
 
-  // Ensure logged-in user exists in profiles
-  useEffect(() => {
-    const syncProfile = async () => {
-      if (!user) return;
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!data) {
-        const { error } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: user.id,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            email: user.email,
-            full_name: user.user_metadata?.full_name || user.email,
-          });
-        if (error) console.error('Failed to insert profile', error);
-      }
-    };
-
-    syncProfile();
-  }, [user]);
-
-  // Fetch salary advance requests with employee details
-  const { data: advances, isLoading } = useQuery({
-    queryKey: ['salary-advances-management'],
+  // Fetch salary advance requests
+  const { data: advances, isLoading: advancesLoading } = useQuery({
+    queryKey: ['salary-advances'],
     queryFn: async () => {
+      if (!canManageSalary) return [];
+
       const { data, error } = await supabase
         .from('salary_advances')
-        .select('*')
+        .select(`
+          id,
+          employee_id,
+          amount,
+          reason,
+          status,
+          review_comment,
+          reviewed_by,
+          created_at,
+          updated_at
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const employeeIds = [...new Set(data?.map(a => a.employee_id) || [])];
-
+      // Fetch employee details
+      const employeeIds = data?.map(a => a.employee_id) || [];
       const { data: profiles } = await supabase
         .from('profiles')
         .select('user_id, full_name, email')
         .in('user_id', employeeIds);
 
-      return data?.map(advance => {
-        const profile = profiles?.find(p => p.user_id === advance.employee_id);
-        return {
-          ...advance,
-          employee_name: profile?.full_name || 'Unknown',
-          employee_email: profile?.email || '',
-        };
-      }) as SalaryAdvance[];
+      return data?.map(advance => ({
+        ...advance,
+        employee_name: profiles?.find(p => p.user_id === advance.employee_id)?.full_name || 'Unknown',
+        employee_email: profiles?.find(p => p.user_id === advance.employee_id)?.email || 'Unknown'
+      })) || [];
     },
+    enabled: canManageSalary,
   });
 
-  // Forward to admin mutation (for finance)
-  const forwardMutation = useMutation({
-    mutationFn: async ({ id, comment }: { id: string; comment: string }) => {
-      if (!user) throw new Error('Not authenticated');
+  // Fetch trainers with basic details
+  const { data: trainers, isLoading: trainersLoading } = useQuery({
+    queryKey: ['trainers-details'],
+    queryFn: async () => {
+      if (!canManageSalary) return [];
+
+      const { data: trainerData, error } = await supabase
+        .from('profiles')
+        .select(`
+          user_id,
+          full_name,
+          email,
+          phone
+        `)
+        .eq('role', 'trainer');
+
+      if (error) throw error;
+
+      // Fetch classes for each trainer
+      const trainersWithClasses = await Promise.all(
+        trainerData?.map(async (trainer) => {
+          const { data: classes } = await supabase
+            .from('classes')
+            .select('name, level')
+            .eq('trainer_id', trainer.user_id)
+            .eq('is_active', true);
+
+          return {
+            ...trainer,
+            classes: classes || [],
+            monthly_salary: 500000, // Default salary for demo
+            role: 'trainer' // Add role property
+          };
+        }) || []
+      );
+
+      return trainersWithClasses;
+    },
+    enabled: canManageSalary,
+  });
+
+  // Generate payroll data
+  const { data: payrollData, isLoading: payrollLoading } = useQuery({
+    queryKey: ['payroll-data', selectedMonth],
+    queryFn: async () => {
+      if (!canManageSalary) return [];
+
+      const monthStart = startOfMonth(new Date(selectedMonth));
+      const monthEnd = endOfMonth(new Date(selectedMonth));
+
+      // Get approved advances for the month
+      const { data: approvedAdvances } = await supabase
+        .from('salary_advances')
+        .select('employee_id, amount')
+        .eq('status', 'approved')
+        .gte('created_at', monthStart.toISOString())
+        .lte('created_at', monthEnd.toISOString());
+
+      // Combine data for each trainer
+      const payrollItems: PayrollItem[] = trainers?.map(trainer => {
+        const advances = approvedAdvances?.filter(a => a.employee_id === trainer.user_id) || [];
+        const totalAdvances = advances.reduce((sum, a) => sum + parseFloat(a.amount.toString()), 0);
+        const baseSalary = trainer.monthly_salary || 500000;
+        const netSalary = baseSalary - totalAdvances;
+
+        return {
+          trainer_id: trainer.user_id,
+          trainer_name: trainer.full_name,
+          base_salary: baseSalary,
+          approved_advances: totalAdvances,
+          net_salary: netSalary,
+          email: trainer.email || '',
+          phone: trainer.phone || '',
+          status: 'pending'
+        };
+      }) || [];
+
+      return payrollItems;
+    },
+    enabled: canManageSalary && !!trainers,
+  });
+
+  // Approve/Reject advance request
+  const reviewAdvanceMutation = useMutation({
+    mutationFn: async ({ id, status, comment, amount }: { id: string; status: 'approved' | 'rejected'; comment: string; amount?: number }) => {
+      if (!canManageSalary) throw new Error('Permission denied');
+
+      const updateData: any = {
+        status,
+        review_comment: comment,
+        reviewed_by: user?.id,
+        updated_at: new Date().toISOString()
+      };
+
+      // If approved with adjusted amount, update the amount
+      if (status === 'approved' && amount) {
+        updateData.amount = amount;
+      }
 
       const { error } = await supabase
         .from('salary_advances')
-        .update({
-          forwarded_to_admin: true,
-          forwarded_at: new Date().toISOString(),
-          forwarded_by: user.id,
-          review_comment: comment || null,
-        })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Request forwarded to admin for approval');
-      queryClient.invalidateQueries({ queryKey: ['salary-advances-management'] });
-      closeDialog();
+      queryClient.invalidateQueries({ queryKey: ['salary-advances'] });
+      queryClient.invalidateQueries({ queryKey: ['payroll-data'] });
+      toast({ title: `Request ${currentAction}d successfully` });
+      setActionDialogOpen(false);
+      setSelectedRequest(null);
+      setReviewComment('');
+      setAdjustedAmount('');
     },
     onError: (error) => {
-      toast.error('Failed to forward request: ' + error.message);
+      toast({ title: 'Error processing request', description: error.message, variant: 'destructive' });
     },
   });
 
-  // Approve/Reject mutation (for admin)
-  const reviewMutation = useMutation({
-    mutationFn: async ({ id, status, comment }: { id: string; status: 'approved' | 'rejected'; comment: string }) => {
-      if (!user) throw new Error('Not authenticated');
-
-      const { error } = await supabase
-        .from('salary_advances')
-        .update({
-          status,
-          review_comment: comment || null,
-          reviewed_by: user.id,
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-    },
-    onSuccess: (_, variables) => {
-      toast.success(`Request ${variables.status === 'approved' ? 'approved' : 'rejected'} successfully`);
-      queryClient.invalidateQueries({ queryKey: ['salary-advances-management'] });
-      closeDialog();
-    },
-    onError: (error) => {
-      toast.error('Failed to update request: ' + error.message);
-    },
-  });
-
-  const openActionDialog = (request: SalaryAdvance, action: 'forward' | 'approve' | 'reject') => {
+  const handleReview = (request: SalaryAdvance, action: 'approved' | 'rejected') => {
     setSelectedRequest(request);
     setCurrentAction(action);
-    setReviewComment('');
     setActionDialogOpen(true);
   };
 
-  const closeDialog = () => {
-    setActionDialogOpen(false);
-    setSelectedRequest(null);
-    setCurrentAction(null);
-    setReviewComment('');
+  const handleSubmitReview = () => {
+    if (!selectedRequest) return;
+
+    const amount = currentAction === 'approved' && adjustedAmount ? parseFloat(adjustedAmount) : undefined;
+    reviewAdvanceMutation.mutate({
+      id: selectedRequest.id,
+      status: currentAction!,
+      comment: reviewComment,
+      amount
+    });
   };
 
-  const handleAction = () => {
-    if (!selectedRequest || !currentAction) return;
-
-    if (currentAction === 'forward') {
-      forwardMutation.mutate({ id: selectedRequest.id, comment: reviewComment });
-    } else {
-      reviewMutation.mutate({
-        id: selectedRequest.id,
-        status: currentAction === 'approve' ? 'approved' : 'rejected',
-        comment: reviewComment,
-      });
+  const exportPayroll = () => {
+    if (!payrollData || payrollData.length === 0) {
+      toast({ title: 'No payroll data to export', variant: 'destructive' });
+      return;
     }
+
+    const csvContent = [
+      'Trainer Name,Email,Phone,Base Salary,Approved Advances,Net Salary,Status',
+      ...payrollData.map(item => [
+        item.trainer_name,
+        item.email,
+        item.phone,
+        item.base_salary,
+        item.approved_advances,
+        item.net_salary,
+        item.status
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `payroll-${selectedMonth}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({ title: 'Payroll exported successfully' });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-RW', {
-      style: 'currency',
-      currency: 'RWF',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const getStatusBadge = (advance: SalaryAdvance) => {
-    if (advance.status === 'approved') return <Badge className="bg-green-500">Approved</Badge>;
-    if (advance.status === 'rejected') return <Badge variant="destructive">Rejected</Badge>;
-    if (advance.forwarded_to_admin) return <Badge className="bg-blue-500">Pending Admin Approval</Badge>;
-    return <Badge variant="secondary">Pending Review</Badge>;
-  };
-
-  const pendingForFinance = advances?.filter(a => a.status === 'pending' && !a.forwarded_to_admin) || [];
-  const forwardedToAdmin = advances?.filter(a => a.status === 'pending' && a.forwarded_to_admin) || [];
-  const processed = advances?.filter(a => a.status !== 'pending') || [];
-
-  const stats = {
-    total: advances?.length || 0,
-    pendingReview: pendingForFinance.length,
-    pendingApproval: forwardedToAdmin.length,
-    approved: advances?.filter(a => a.status === 'approved').length || 0,
-    rejected: advances?.filter(a => a.status === 'rejected').length || 0,
-    totalAmount: advances?.filter(a => a.status === 'approved').reduce((sum, a) => sum + a.amount, 0) || 0,
-  };
-
-  if (isLoading) return <div className="flex items-center justify-center h-64"><LoadingSpinner size="lg" /></div>;
-
-  const renderRequestsTable = (requests: SalaryAdvance[], showActions: boolean, actionType: 'finance' | 'admin') => (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Employee</TableHead>
-            <TableHead>Amount</TableHead>
-            <TableHead>Reason</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Submitted</TableHead>
-            {showActions && <TableHead className="text-right">Actions</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {requests.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                No requests found
-              </TableCell>
-            </TableRow>
-          ) : requests.map(request => (
-            <TableRow key={request.id}>
-              <TableCell>
-                <div>
-                  <p className="font-medium">{request.employee_name}</p>
-                  <p className="text-sm text-muted-foreground">{request.employee_email}</p>
-                </div>
-              </TableCell>
-              <TableCell className="font-medium">{formatCurrency(request.amount)}</TableCell>
-              <TableCell className="max-w-xs truncate">{request.reason}</TableCell>
-              <TableCell>{getStatusBadge(request)}</TableCell>
-              <TableCell>{format(new Date(request.created_at), 'MMM d, yyyy')}</TableCell>
-              {showActions && (
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {actionType === 'finance' && (
-                      <>
-                        <Button size="sm" onClick={() => openActionDialog(request, 'forward')}>
-                          <Send className="w-4 h-4 mr-1" /> Forward to Admin
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(request, 'reject')}>
-                          <XCircle className="w-4 h-4 mr-1" /> Reject
-                        </Button>
-                      </>
-                    )}
-                    {actionType === 'admin' && (
-                      <>
-                        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => openActionDialog(request, 'approve')}>
-                          <CheckCircle className="w-4 h-4 mr-1" /> Approve
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => openActionDialog(request, 'reject')}>
-                          <XCircle className="w-4 h-4 mr-1" /> Reject
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-              )}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
+  if (!canManageSalary) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-12">
+          <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+          <p className="text-muted-foreground">
+            You don't have permission to manage salary and payroll. Only admins can access this page.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-display font-bold">Salary Advance Requests</h1>
-        <p className="text-muted-foreground">
-          {isAdmin ? 'Review and approve salary advance requests' : 'Review requests and forward to admin for approval'}
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Pending Review */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingReview}</div>
-            <p className="text-xs text-muted-foreground">Awaiting finance review</p>
-          </CardContent>
-        </Card>
-        {/* Pending Approval */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
-            <AlertCircle className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingApproval}</div>
-            <p className="text-xs text-muted-foreground">Forwarded to admin</p>
-          </CardContent>
-        </Card>
-        {/* Approved */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.approved}</div>
-            <p className="text-xs text-muted-foreground">This period</p>
-          </CardContent>
-        </Card>
-        {/* Total Approved Amount */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Approved Amount</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalAmount)}</div>
-            <p className="text-xs text-muted-foreground">All time</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabs */}
-      <Tabs defaultValue={isAdmin ? 'pending-approval' : 'pending-review'}>
-        <TabsList>
-          {isFinance && (
-            <TabsTrigger value="pending-review" className="flex items-center gap-2">
-              <Clock className="w-4 h-4" /> Pending Review ({pendingForFinance.length})
-            </TabsTrigger>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Wallet className="w-8 h-8 text-green-600" />
+          <div>
+            <h1 className="text-3xl font-bold">Salary & Payroll Management</h1>
+            <p className="text-muted-foreground">
+              Manage salary advances, approve requests, and process payroll
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {activeTab === 'payroll' && (
+            <Button onClick={exportPayroll} variant="outline">
+              <Download className="w-4 h-4 mr-2" />
+              Export Payroll
+            </Button>
           )}
-          <TabsTrigger value="pending-approval" className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" /> Pending Admin Approval ({forwardedToAdmin.length})
-          </TabsTrigger>
-          <TabsTrigger value="processed" className="flex items-center gap-2">
-            <Users className="w-4 h-4" /> Processed ({processed.length})
-          </TabsTrigger>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="advances">Salary Advances</TabsTrigger>
+          <TabsTrigger value="trainers">Trainer Details</TabsTrigger>
+          <TabsTrigger value="payroll">Payroll</TabsTrigger>
         </TabsList>
 
-        {isFinance && (
-          <TabsContent value="pending-review" className="mt-4">
-            {renderRequestsTable(pendingForFinance, true, 'finance')}
-          </TabsContent>
-        )}
-        <TabsContent value="pending-approval" className="mt-4">
-          {renderRequestsTable(forwardedToAdmin, isAdmin, 'admin')}
+        {/* Salary Advances Tab */}
+        <TabsContent value="advances" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                Salary Advance Requests
+              </CardTitle>
+              <CardDescription>
+                Review and manage salary advance requests from employees
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {advancesLoading ? (
+                <div className="text-center py-8">
+                  <LoadingSpinner size="lg" />
+                </div>
+              ) : advances && advances.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {advances.map((advance) => (
+                        <TableRow key={advance.id}>
+                          <TableCell className="font-medium">{advance.employee_name}</TableCell>
+                          <TableCell>{advance.employee_email}</TableCell>
+                          <TableCell>RWF {parseFloat(advance.amount.toString()).toLocaleString()}</TableCell>
+                          <TableCell className="max-w-xs truncate">{advance.reason}</TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={advance.status === 'approved' ? 'default' : 
+                                      advance.status === 'rejected' ? 'destructive' : 'secondary'}
+                            >
+                              {advance.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{format(new Date(advance.created_at), 'MMM d, yyyy')}</TableCell>
+                          <TableCell>
+                            {advance.status === 'pending' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleReview(advance, 'approved')}
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleReview(advance, 'rejected')}
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <DollarSign className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No salary advance requests found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
-        <TabsContent value="processed" className="mt-4">
-          {renderRequestsTable(processed, false, 'admin')}
+
+        {/* Trainer Details Tab */}
+        <TabsContent value="trainers" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Trainer Payment Information
+              </CardTitle>
+              <CardDescription>
+                View trainer payment channels and account details
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {trainersLoading ? (
+                <div className="text-center py-8">
+                  <LoadingSpinner size="lg" />
+                </div>
+              ) : trainers && trainers.length > 0 ? (
+                <div className="space-y-4">
+                  {trainers.map((trainer) => (
+                    <Card key={trainer.user_id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold">{trainer.full_name}</h3>
+                            <Badge variant="outline">{trainer.role}</Badge>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div className="space-y-1">
+                              <p><span className="font-medium">Email:</span> {trainer.email}</p>
+                              <p><span className="font-medium">Phone:</span> {trainer.phone}</p>
+                              <p><span className="font-medium">Monthly Salary:</span> RWF {trainer.monthly_salary?.toLocaleString() || 0}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <p><span className="font-medium">Payment Channel:</span> Bank Transfer</p>
+                              <p><span className="font-medium">Bank:</span> Bank of Kigali</p>
+                              <p><span className="font-medium">Account:</span> To be provided</p>
+                            </div>
+                          </div>
+                          {trainer.classes && trainer.classes.length > 0 && (
+                            <div>
+                              <p className="font-medium text-sm mb-1">Classes:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {trainer.classes.map((cls, index) => (
+                                  <Badge key={index} variant="secondary" className="text-xs">
+                                    {cls.name} ({cls.level})
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No trainers found</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Payroll Tab */}
+        <TabsContent value="payroll" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Monthly Payroll
+              </CardTitle>
+              <CardDescription>
+                Process and manage monthly payroll with advances and deductions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4 mb-6">
+                <Label>Select Month</Label>
+                <Input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-fit"
+                />
+              </div>
+
+              {payrollLoading ? (
+                <div className="text-center py-8">
+                  <LoadingSpinner size="lg" />
+                </div>
+              ) : payrollData && payrollData.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Payroll Summary */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold">{payrollData.length}</div>
+                        <p className="text-sm text-muted-foreground">Trainers</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold">
+                          RWF {payrollData.reduce((sum, item) => sum + item.base_salary, 0).toLocaleString()}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Total Base Salary</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold text-red-600">
+                          RWF {payrollData.reduce((sum, item) => sum + item.approved_advances, 0).toLocaleString()}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Total Advances</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <div className="text-2xl font-bold text-green-600">
+                          RWF {payrollData.reduce((sum, item) => sum + item.net_salary, 0).toLocaleString()}
+                        </div>
+                        <p className="text-sm text-muted-foreground">Net Payroll</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Payroll Details Table */}
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Trainer</TableHead>
+                          <TableHead>Base Salary</TableHead>
+                          <TableHead>Advances</TableHead>
+                          <TableHead>Net Salary</TableHead>
+                          <TableHead>Payment Channel</TableHead>
+                          <TableHead>Bank Account</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {payrollData.map((item) => (
+                          <TableRow key={item.trainer_id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">{item.trainer_name}</p>
+                                <p className="text-sm text-muted-foreground">{item.email}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>RWF {item.base_salary.toLocaleString()}</TableCell>
+                            <TableCell className="text-red-600">
+                              RWF {item.approved_advances.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="font-bold text-green-600">
+                              RWF {item.net_salary.toLocaleString()}
+                            </TableCell>
+                            <TableCell>Bank Transfer</TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                <p>Bank of Kigali</p>
+                                <p className="font-mono">Pending</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={item.status === 'processed' ? 'default' : 'secondary'}>
+                                {item.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline">
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No payroll data found for selected month</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Action Dialog */}
+      {/* Review Dialog */}
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {currentAction === 'forward' ? 'Forward Request to Admin' :
-               currentAction === 'approve' ? 'Approve Request' : 'Reject Request'}
+              {currentAction === 'approved' ? 'Approve Salary Advance' : 'Reject Salary Advance'}
             </DialogTitle>
             <DialogDescription>
-              {selectedRequest && (
-                <div className="mt-2 space-y-1 text-foreground">
-                  <p><strong>Employee:</strong> {selectedRequest.employee_name}</p>
-                  <p><strong>Amount:</strong> {formatCurrency(selectedRequest.amount)}</p>
-                  <p><strong>Reason:</strong> {selectedRequest.reason}</p>
-                </div>
-              )}
+              {currentAction === 'approved' && 'Approve this salary advance request. You can adjust the amount if needed.'}
+              {currentAction === 'rejected' && 'Reject this salary advance request with a reason.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="comment">
-                {currentAction === 'forward' ? 'Notes for Admin (optional)' : 'Review Comment (optional)'}
-              </Label>
-              <Textarea
-                id="comment"
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder={currentAction === 'forward' ? 'Add notes for admin...' : 'Add review comment...'}
-                rows={3}
-              />
+          
+          {currentAction === 'approved' && selectedRequest && (
+            <div className="space-y-4">
+              <div>
+                <Label>Original Amount</Label>
+                <p className="text-lg font-semibold">RWF {parseFloat(selectedRequest.amount.toString()).toLocaleString()}</p>
+              </div>
+              <div>
+                <Label>Adjusted Amount (Optional)</Label>
+                <Input
+                  type="number"
+                  placeholder="Leave empty to use original amount"
+                  value={adjustedAmount}
+                  onChange={(e) => setAdjustedAmount(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Review Comment</Label>
+                <Textarea
+                  placeholder="Add any comments about this approval..."
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
+          )}
+
+          {currentAction === 'rejected' && (
+            <div className="space-y-4">
+              <div>
+                <Label>Rejection Reason</Label>
+                <Textarea
+                  placeholder="Please provide a reason for rejecting this request..."
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-            <Button
-              onClick={handleAction}
-              disabled={forwardMutation.isPending || reviewMutation.isPending}
-              className={currentAction === 'approve' ? 'bg-green-600 hover:bg-green-700' :
-                         currentAction === 'reject' ? 'bg-destructive hover:bg-destructive/90' : ''}
-            >
-              {(forwardMutation.isPending || reviewMutation.isPending) ? 'Processing...' :
-               currentAction === 'forward' ? 'Forward to Admin' :
-               currentAction === 'approve' ? 'Approve Request' : 'Reject Request'}
+            <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitReview}>
+              {currentAction === 'approved' && 'Approve'}
+              {currentAction === 'rejected' && 'Reject'}
             </Button>
           </DialogFooter>
         </DialogContent>
