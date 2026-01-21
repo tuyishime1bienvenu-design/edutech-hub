@@ -30,11 +30,10 @@ interface GalleryImage {
   id: string;
   title: string;
   description: string | null;
-  file_url: string;
-  type: string;
-  event_name: string | null;
+  image_url: string;
+  category: string | null;
   tags: string[] | null;
-  is_public: boolean;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -59,7 +58,7 @@ const Gallery = () => {
 
   const filteredImages = selectedCategory === "all" 
     ? images 
-    : images.filter(img => img.event_name?.toLowerCase().includes(selectedCategory) || img.tags?.some(tag => tag.toLowerCase().includes(selectedCategory)));
+    : images.filter(img => img.category?.toLowerCase().includes(selectedCategory) || img.tags?.some(tag => tag.toLowerCase().includes(selectedCategory)));
 
   // Slideshow auto-play functionality
   useEffect(() => {
@@ -67,7 +66,7 @@ const Gallery = () => {
     if (isPlaying && viewMode === "slideshow" && filteredImages.length > 0) {
       interval = setInterval(() => {
         setCurrentSlideIndex((prev) => (prev + 1) % filteredImages.length);
-      }, 3000); // Change slide every 3 seconds
+      }, 3000);
     }
     return () => clearInterval(interval);
   }, [isPlaying, viewMode, filteredImages.length]);
@@ -97,12 +96,10 @@ const Gallery = () => {
   useEffect(() => {
     const fetchImages = async () => {
       try {
-        console.log('Fetching public gallery images...');
         const { data, error } = await supabase
-          .from("gallery_items")
+          .from("gallery_images")
           .select("*")
-          .eq("is_public", true)
-          .eq("type", "image")
+          .eq("is_active", true)
           .order("created_at", { ascending: false });
 
         if (error) {
@@ -110,7 +107,6 @@ const Gallery = () => {
           throw error;
         }
         
-        console.log('Public gallery images fetched:', data);
         setImages(data || []);
       } catch (error) {
         console.error("Error fetching images:", error);
@@ -124,7 +120,7 @@ const Gallery = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ================= HERO ================= */}
+      {/* Hero Section */}
       <section className="gradient-primary text-white section-padding">
         <div className="container-max-width">
           <motion.div
@@ -144,7 +140,7 @@ const Gallery = () => {
         </div>
       </section>
 
-      {/* ================= CATEGORIES ================= */}
+      {/* Categories */}
       <section className="section-padding bg-card border-b border-border">
         <div className="container-max-width">
           <motion.div
@@ -174,7 +170,7 @@ const Gallery = () => {
         </div>
       </section>
 
-      {/* ================= GALLERY GRID ================= */}
+      {/* Gallery Grid */}
       <section className="section-padding bg-background">
         <div className="container-max-width">
           <motion.div
@@ -235,16 +231,16 @@ const Gallery = () => {
                       >
                         <div className="relative w-full h-full">
                           <img
-                            src={image.file_url}
+                            src={image.image_url}
                             alt={image.title}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                             loading="lazy"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
                             <h3 className="text-white font-semibold text-sm mb-1">{image.title}</h3>
-                            {image.event_name && (
+                            {image.category && (
                               <Badge className="w-fit bg-white/20 text-white border-white/30 text-xs">
-                                {image.event_name}
+                                {image.category}
                               </Badge>
                             )}
                           </div>
@@ -255,7 +251,6 @@ const Gallery = () => {
                 </motion.div>
               ) : (
                 <div className="relative">
-                  {/* Slideshow View */}
                   <div className="relative h-[70vh] bg-black rounded-lg overflow-hidden">
                     <AnimatePresence mode="wait">
                       <motion.div
@@ -267,7 +262,7 @@ const Gallery = () => {
                         className="w-full h-full"
                       >
                         <img
-                          src={filteredImages[currentSlideIndex]?.file_url}
+                          src={filteredImages[currentSlideIndex]?.image_url}
                           alt={filteredImages[currentSlideIndex]?.title}
                           className="w-full h-full object-contain"
                         />
@@ -284,7 +279,6 @@ const Gallery = () => {
                       </motion.div>
                     </AnimatePresence>
 
-                    {/* Slideshow Controls */}
                     <div className="absolute top-4 right-4 flex items-center gap-2">
                       <Button
                         variant="secondary"
@@ -296,7 +290,6 @@ const Gallery = () => {
                       </Button>
                     </div>
 
-                    {/* Navigation Arrows */}
                     <button
                       onClick={prevSlide}
                       className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
@@ -310,7 +303,6 @@ const Gallery = () => {
                       <ChevronRight className="w-6 h-6" />
                     </button>
 
-                    {/* Slide Indicators */}
                     <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
                       {filteredImages.map((_, index) => (
                         <button
@@ -337,7 +329,7 @@ const Gallery = () => {
         </div>
       </section>
 
-      {/* ================= STATS ================= */}
+      {/* Stats Section */}
       <section className="section-padding bg-card border-t border-border">
         <div className="container-max-width">
           <motion.div
@@ -377,7 +369,7 @@ const Gallery = () => {
         </div>
       </section>
 
-      {/* ================= CTA ================= */}
+      {/* CTA Section */}
       <section className="section-padding gradient-primary text-white">
         <div className="container-max-width text-center">
           <motion.div
@@ -413,7 +405,7 @@ const Gallery = () => {
         </div>
       </section>
 
-      {/* ================= IMAGE DIALOG ================= */}
+      {/* Image Dialog */}
       <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
         <DialogContent className="max-w-4xl p-0 overflow-hidden">
           {selectedImage && (
@@ -426,7 +418,7 @@ const Gallery = () => {
               </DialogDescription>
               <div>
                 <img
-                  src={selectedImage.file_url}
+                  src={selectedImage.image_url}
                   alt={selectedImage.title}
                   className="w-full h-auto max-h-[70vh] object-contain"
                 />
