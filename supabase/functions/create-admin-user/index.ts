@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, password, fullName, phone, roles = ["admin"], studentData } = await req.json();
+    const { email, password, fullName, phone, roles = ["student"], studentData } = await req.json();
 
     console.log(`Creating user with email: ${email}, roles: ${roles}`);
 
@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
     // Create roles
     const roleInserts = roles.map(role => ({
       user_id: userId,
-      role: role,
+      role: role,  // Store as individual role records, not text
     }));
 
     const { error: roleError } = await supabaseAdmin.from("user_roles").insert(roleInserts);

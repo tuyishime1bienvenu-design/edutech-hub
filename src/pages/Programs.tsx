@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { supabaseService } from "@/integrations/supabase/service-client";
 import type { Database } from "@/integrations/supabase/types";
 
 type Program = Database["public"]["Tables"]["programs"]["Row"];
@@ -39,7 +40,7 @@ const Programs = () => {
   useEffect(() => {
     const fetchPrograms = async () => {
       try {
-        const { data: programsData, error } = await supabase
+        const { data: programsData, error } = await supabaseService
           .from("programs")
           .select("*")
           .order("created_at", { ascending: false });
@@ -58,14 +59,9 @@ const Programs = () => {
   }, []);
 
   const isProgramOpen = (program: Program) => {
-    if (!program.is_active) return false;
-    
-    const now = new Date();
-    const endDate = new Date(program.end_date);
-    const startDate = new Date(program.start_date);
-    
-    // Program is open if current date is between start and end date (inclusive)
-    return now >= startDate && now <= endDate;
+    // For now, show all active programs regardless of dates (same as Register.tsx)
+    // TODO: Implement proper date-based filtering for upcoming/current programs
+    return program.is_active;
   };
 
   const openPrograms = programs.filter(isProgramOpen);
@@ -75,6 +71,15 @@ const Programs = () => {
     const matchesSearch = program.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          program.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesLevel = selectedLevel === "all" || (selectedLevel as any) && program.eligible_levels.includes(selectedLevel as any);
+    
+    // Debug logging
+    console.log('Filtering program:', program.name);
+    console.log('- eligible_levels:', program.eligible_levels);
+    console.log('- selectedLevel:', selectedLevel);
+    console.log('- matchesSearch:', matchesSearch);
+    console.log('- matchesLevel:', matchesLevel);
+    console.log('- final result:', matchesSearch && matchesLevel);
+    
     return matchesSearch && matchesLevel;
   });
 
@@ -84,17 +89,8 @@ const Programs = () => {
   const getProgramStatus = (program: Program) => {
     if (!program.is_active) return { status: 'Closed', color: 'gray', reason: 'Program inactive' };
     
-    const now = new Date();
-    const endDate = new Date(program.end_date);
-    const startDate = new Date(program.start_date);
-    
-    if (now < startDate) {
-      return { status: 'Coming Soon', color: 'blue', reason: 'Starts ' + startDate.toLocaleDateString() };
-    } else if (now > endDate) {
-      return { status: 'Expired', color: 'red', reason: 'Ended ' + endDate.toLocaleDateString() };
-    } else {
-      return { status: 'Open', color: 'green', reason: 'Closes ' + endDate.toLocaleDateString() };
-    }
+    // For now, show all active programs as 'Open' (same as Register.tsx logic)
+    return { status: 'Open', color: 'green', reason: 'Available for registration' };
   };
 
   const getProgramImage = (programName: string) => {

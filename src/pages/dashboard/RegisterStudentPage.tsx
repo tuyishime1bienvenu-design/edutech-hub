@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { UserPlus, School, Phone, CheckCircle, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { supabaseService } from '@/integrations/supabase/service-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,7 +44,7 @@ const RegisterStudentPage = () => {
   const { data: classes = [] } = useQuery({
     queryKey: ['available-classes', formData.level, formData.preferredShift],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseService
         .from('classes')
         .select('id, name, level, shift, current_enrollment, max_capacity')
         .eq('is_active', true)

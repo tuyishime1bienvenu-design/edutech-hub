@@ -67,6 +67,7 @@ ALTER TABLE public.job_applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.job_documents ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Admins and Secretaries can manage job postings
+DROP POLICY IF EXISTS "Admins and Secretaries can manage job postings" ON public.job_postings;
 CREATE POLICY "Admins and Secretaries can manage job postings" ON public.job_postings
   FOR ALL USING (
     EXISTS (
@@ -76,16 +77,19 @@ CREATE POLICY "Admins and Secretaries can manage job postings" ON public.job_pos
   );
 
 -- Policy: Anyone can read active job postings
+DROP POLICY IF EXISTS "Anyone can read active job postings" ON public.job_postings;
 CREATE POLICY "Anyone can read active job postings" ON public.job_postings
   FOR SELECT USING (
     is_active = true AND (application_deadline IS NULL OR application_deadline > NOW())
   );
 
 -- Policy: Anyone can insert applications
+DROP POLICY IF EXISTS "Anyone can insert job applications" ON public.job_applications;
 CREATE POLICY "Anyone can insert job applications" ON public.job_applications
   FOR INSERT WITH CHECK (true);
 
 -- Policy: Admins and Secretaries can read all applications
+DROP POLICY IF EXISTS "Admins and Secretaries can read job applications" ON public.job_applications;
 CREATE POLICY "Admins and Secretaries can read job applications" ON public.job_applications
   FOR SELECT USING (
     EXISTS (
@@ -95,6 +99,7 @@ CREATE POLICY "Admins and Secretaries can read job applications" ON public.job_a
   );
 
 -- Policy: Admins and Secretaries can update applications
+DROP POLICY IF EXISTS "Admins and Secretaries can update job applications" ON public.job_applications;
 CREATE POLICY "Admins and Secretaries can update job applications" ON public.job_applications
   FOR UPDATE USING (
     EXISTS (
@@ -104,6 +109,7 @@ CREATE POLICY "Admins and Secretaries can update job applications" ON public.job
   );
 
 -- Policy: Users can update their own applications (withdraw only)
+DROP POLICY IF EXISTS "Users can update own applications" ON public.job_applications;
 CREATE POLICY "Users can update own applications" ON public.job_applications
   FOR UPDATE USING (
     applicant_id = auth.uid() AND (
@@ -112,6 +118,7 @@ CREATE POLICY "Users can update own applications" ON public.job_applications
   );
 
 -- Policy: Admins and Secretaries can delete applications
+DROP POLICY IF EXISTS "Admins and Secretaries can delete job applications" ON public.job_applications;
 CREATE POLICY "Admins and Secretaries can delete job applications" ON public.job_applications
   FOR DELETE USING (
     EXISTS (
@@ -121,6 +128,7 @@ CREATE POLICY "Admins and Secretaries can delete job applications" ON public.job
   );
 
 -- Policy: Anyone can read job documents
+DROP POLICY IF EXISTS "Anyone can read job documents" ON public.job_documents;
 CREATE POLICY "Anyone can read job documents" ON public.job_documents
   FOR SELECT USING (true);
 
@@ -134,11 +142,13 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers to automatically update updated_at
+DROP TRIGGER IF EXISTS update_job_postings_updated_at ON public.job_postings;
 CREATE TRIGGER update_job_postings_updated_at
     BEFORE UPDATE ON public.job_postings
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_job_applications_updated_at ON public.job_applications;
 CREATE TRIGGER update_job_applications_updated_at
     BEFORE UPDATE ON public.job_applications
     FOR EACH ROW

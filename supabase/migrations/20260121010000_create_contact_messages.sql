@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_contact_messages_inquiry_type ON public.contact_m
 ALTER TABLE public.contact_messages ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Admins and Secretaries can read all messages
+DROP POLICY IF EXISTS "Admins and Secretaries can read contact messages" ON public.contact_messages;
 CREATE POLICY "Admins and Secretaries can read contact messages" ON public.contact_messages
   FOR SELECT USING (
     EXISTS (
@@ -34,6 +35,7 @@ CREATE POLICY "Admins and Secretaries can read contact messages" ON public.conta
   );
 
 -- Policy: Admins and Secretaries can update messages (mark as read, reply)
+DROP POLICY IF EXISTS "Admins and Secretaries can update contact messages" ON public.contact_messages;
 CREATE POLICY "Admins and Secretaries can update contact messages" ON public.contact_messages
   FOR UPDATE USING (
     EXISTS (
@@ -43,10 +45,12 @@ CREATE POLICY "Admins and Secretaries can update contact messages" ON public.con
   );
 
 -- Policy: Anyone can insert messages (public contact form)
+DROP POLICY IF EXISTS "Anyone can insert contact messages" ON public.contact_messages;
 CREATE POLICY "Anyone can insert contact messages" ON public.contact_messages
   FOR INSERT WITH CHECK (true);
 
 -- Policy: Only Admins and Secretaries can delete messages
+DROP POLICY IF EXISTS "Admins and Secretaries can delete contact messages" ON public.contact_messages;
 CREATE POLICY "Admins and Secretaries can delete contact messages" ON public.contact_messages
   FOR DELETE USING (
     EXISTS (
@@ -65,6 +69,7 @@ END;
 $$ language 'plpgsql';
 
 -- Create trigger to automatically update updated_at
+DROP TRIGGER IF EXISTS update_contact_messages_updated_at ON public.contact_messages;
 CREATE TRIGGER update_contact_messages_updated_at
     BEFORE UPDATE ON public.contact_messages
     FOR EACH ROW

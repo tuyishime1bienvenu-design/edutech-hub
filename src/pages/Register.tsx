@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { supabaseService } from "@/integrations/supabase/service-client";
 import type { Database } from "@/integrations/supabase/types";
 
 type Program = Database["public"]["Tables"]["programs"]["Row"];
@@ -76,7 +77,7 @@ const Register = () => {
 
   const fetchPrograms = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseService
         .from("programs")
         .select("*")
         .eq("is_active", true)

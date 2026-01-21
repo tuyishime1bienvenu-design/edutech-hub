@@ -14,6 +14,7 @@ import Services from "./pages/Services";
 import Gallery from "./pages/Gallery";
 import Contact from "./pages/Contact";
 import Register from "./pages/Register";
+import RegisterStudentPage from "./pages/dashboard/RegisterStudentPage";
 import Vacancies from "./pages/Vacancies";
 import Announcements from "./pages/Announcements";
 import NotFound from "./pages/NotFound";
@@ -101,6 +102,10 @@ const App = () => (
                   <Register />
                 </MainLayout>
               }
+            />
+            <Route
+              path="/student-register"
+              element={<RegisterStudentPage />}
             />
             <Route
               path="/login"
